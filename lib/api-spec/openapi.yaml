@@ -606,6 +606,18 @@ components:
           type: number
         institutionPercent:
           type: number
+        faceValue:
+          type: number
+          description: Face value of the share
+        vwap:
+          type: number
+          description: Volume weighted average price (today)
+        deliveryPct:
+          type: number
+          description: Delivery percentage (%)
+        annualVolatility:
+          type: number
+          description: Annual volatility (%)
       required: [symbol, name]
 
     Candle:

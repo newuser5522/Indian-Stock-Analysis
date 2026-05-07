@@ -260,6 +260,10 @@ export const GetStockFundamentalsResponse = zod.object({
   float: zod.number().optional(),
   insiderPercent: zod.number().optional(),
   institutionPercent: zod.number().optional(),
+  faceValue: zod.number().optional().describe("Face value of the share"),
+  vwap: zod.number().optional().describe("Volume weighted average price (today)"),
+  deliveryPct: zod.number().optional().describe("Delivery percentage (%)"),
+  annualVolatility: zod.number().optional().describe("Annual volatility (%)"),
 });
 
 /**

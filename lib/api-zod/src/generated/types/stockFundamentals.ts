@@ -50,4 +50,12 @@ export interface StockFundamentals {
   float?: number;
   insiderPercent?: number;
   institutionPercent?: number;
+  /** Face value of the share */
+  faceValue?: number;
+  /** Volume weighted average price (today) */
+  vwap?: number;
+  /** Delivery percentage (%) */
+  deliveryPct?: number;
+  /** Annual volatility (%) */
+  annualVolatility?: number;
 }

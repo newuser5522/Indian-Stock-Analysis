@@ -11,6 +11,89 @@ const HEADERS = {
   Referer: "https://finance.yahoo.com/",
 };
 
+const NSE_BASE = "https://www.nseindia.com/api";
+const NSE_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept: "*/*",
+  "Accept-Language": "en-US,en;q=0.9",
+  Referer: "https://www.nseindia.com/",
+};
+
+export interface NseData {
+  pe?: number;
+  marketCapCrores?: number;
+  vwap?: number;
+  faceValue?: number;
+  deliveryPct?: number;
+  annualVolatility?: number;
+  sector?: string;
+  industry?: string;
+  sharesOutstanding?: number;
+}
+
+export async function fetchNseData(symbol: string): Promise<NseData> {
+  const nseSymbol = symbol.replace(/\.(NS|BO)$/i, "").toUpperCase();
+  try {
+    const [quoteRes, tradeRes] = await Promise.all([
+      fetch(`${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}`, {
+        headers: NSE_HEADERS,
+      }),
+      fetch(
+        `${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}&section=trade_info`,
+        { headers: NSE_HEADERS }
+      ),
+    ]);
+
+    const result: NseData = {};
+
+    if (quoteRes.ok) {
+      const quoteData = (await quoteRes.json()) as {
+        metadata?: { pdSymbolPe?: number };
+        priceInfo?: { vwap?: number };
+        industryInfo?: {
+          macro?: string;
+          sector?: string;
+          industry?: string;
+          basicIndustry?: string;
+        };
+        securityInfo?: { faceValue?: number; issuedSize?: number };
+      };
+      result.pe = quoteData.metadata?.pdSymbolPe ?? undefined;
+      result.vwap = quoteData.priceInfo?.vwap ?? undefined;
+      result.faceValue = quoteData.securityInfo?.faceValue ?? undefined;
+      result.sharesOutstanding = quoteData.securityInfo?.issuedSize ?? undefined;
+      result.sector = quoteData.industryInfo?.macro ?? undefined;
+      result.industry =
+        quoteData.industryInfo?.industry ??
+        quoteData.industryInfo?.basicIndustry ??
+        undefined;
+    }
+
+    if (tradeRes.ok) {
+      const tradeData = (await tradeRes.json()) as {
+        marketDeptOrderBook?: {
+          tradeInfo?: {
+            totalMarketCap?: number;
+            cmAnnualVolatility?: string;
+          };
+        };
+        securityWiseDP?: { deliveryToTradedQuantity?: number };
+      };
+      result.marketCapCrores =
+        tradeData.marketDeptOrderBook?.tradeInfo?.totalMarketCap ?? undefined;
+      const volStr = tradeData.marketDeptOrderBook?.tradeInfo?.cmAnnualVolatility;
+      result.annualVolatility = volStr ? parseFloat(volStr) : undefined;
+      result.deliveryPct =
+        tradeData.securityWiseDP?.deliveryToTradedQuantity ?? undefined;
+    }
+
+    return result;
+  } catch {
+    return {};
+  }
+}
+
 async function yfFetch(url: string): Promise<unknown> {
   const res = await fetch(url, { headers: HEADERS });
   if (!res.ok) {
