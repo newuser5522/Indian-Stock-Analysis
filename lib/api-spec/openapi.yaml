@@ -3,20 +3,31 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Indian Stock Screener API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: market
+    description: Market overview and indices
+  - name: stocks
+    description: Stock quotes and search
+  - name: fundamentals
+    description: Fundamental analysis data
+  - name: history
+    description: Historical price data
+  - name: screener
+    description: Stock screener and filtering
+  - name: watchlist
+    description: User watchlist management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +35,419 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /market/overview:
+    get:
+      operationId: getMarketOverview
+      tags: [market]
+      summary: Get major Indian market indices (Nifty 50, Sensex, Nifty Bank, etc.)
+      responses:
+        "200":
+          description: Market overview with index prices and changes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  indices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IndexQuote"
+                required: [indices]
+
+  /market/top-gainers:
+    get:
+      operationId: getTopGainers
+      tags: [market]
+      summary: Get top gaining stocks today
+      parameters:
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [NSE, BSE]
+            default: NSE
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Top gaining stocks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stocks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StockQuote"
+                required: [stocks]
+
+  /market/top-losers:
+    get:
+      operationId: getTopLosers
+      tags: [market]
+      summary: Get top losing stocks today
+      parameters:
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [NSE, BSE]
+            default: NSE
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Top losing stocks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stocks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StockQuote"
+                required: [stocks]
+
+  /market/most-active:
+    get:
+      operationId: getMostActive
+      tags: [market]
+      summary: Get most actively traded stocks today
+      parameters:
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [NSE, BSE]
+            default: NSE
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Most active stocks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stocks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StockQuote"
+                required: [stocks]
+
+  /stocks/search:
+    get:
+      operationId: searchStocks
+      tags: [stocks]
+      summary: Search stocks by name or symbol
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [NSE, BSE, ALL]
+            default: ALL
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StockSearchResult"
+                required: [results]
+
+  /stocks/quote/{symbol}:
+    get:
+      operationId: getStockQuote
+      tags: [stocks]
+      summary: Get real-time quote for a stock
+      parameters:
+        - in: path
+          name: symbol
+          required: true
+          schema:
+            type: string
+          description: Yahoo Finance symbol (e.g. RELIANCE.NS, TCS.NS)
+      responses:
+        "200":
+          description: Stock quote with price data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockQuote"
+
+  /stocks/quotes:
+    get:
+      operationId: getMultipleQuotes
+      tags: [stocks]
+      summary: Get quotes for multiple stocks at once
+      parameters:
+        - in: query
+          name: symbols
+          required: true
+          schema:
+            type: string
+          description: Comma-separated list of symbols
+      responses:
+        "200":
+          description: Multiple stock quotes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quotes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StockQuote"
+                required: [quotes]
+
+  /stocks/fundamentals/{symbol}:
+    get:
+      operationId: getStockFundamentals
+      tags: [fundamentals]
+      summary: Get detailed fundamental analysis for a stock
+      parameters:
+        - in: path
+          name: symbol
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fundamental data including valuation, financials, growth metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockFundamentals"
+
+  /stocks/history/{symbol}:
+    get:
+      operationId: getStockHistory
+      tags: [history]
+      summary: Get historical OHLCV price data for charting
+      parameters:
+        - in: path
+          name: symbol
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y]
+            default: 1mo
+        - in: query
+          name: interval
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 1h, 1d, 1wk, 1mo]
+            default: 1d
+      responses:
+        "200":
+          description: Historical price data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  symbol:
+                    type: string
+                  candles:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Candle"
+                required: [symbol, candles]
+
+  /screener:
+    get:
+      operationId: screenStocks
+      tags: [screener]
+      summary: Screen stocks based on fundamental and price criteria
+      parameters:
+        - in: query
+          name: exchange
+          schema:
+            type: string
+            enum: [NSE, BSE, ALL]
+            default: NSE
+        - in: query
+          name: sector
+          schema:
+            type: string
+        - in: query
+          name: minMarketCap
+          schema:
+            type: number
+          description: Minimum market cap in crores
+        - in: query
+          name: maxMarketCap
+          schema:
+            type: number
+        - in: query
+          name: minPe
+          schema:
+            type: number
+        - in: query
+          name: maxPe
+          schema:
+            type: number
+        - in: query
+          name: minPb
+          schema:
+            type: number
+        - in: query
+          name: maxPb
+          schema:
+            type: number
+        - in: query
+          name: minDividendYield
+          schema:
+            type: number
+        - in: query
+          name: minRoe
+          schema:
+            type: number
+          description: Minimum Return on Equity (%)
+        - in: query
+          name: minEpsGrowth
+          schema:
+            type: number
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [marketCap, pe, pb, dividendYield, roe, changePercent, volume]
+            default: marketCap
+        - in: query
+          name: sortOrder
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Filtered and sorted stock list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stocks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScreenerStock"
+                  total:
+                    type: integer
+                required: [stocks, total]
+
+  /screener/sectors:
+    get:
+      operationId: getSectors
+      tags: [screener]
+      summary: Get list of available sectors with stock counts
+      responses:
+        "200":
+          description: Sectors with stock counts and average metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sectors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SectorSummary"
+                required: [sectors]
+
+  /watchlist:
+    get:
+      operationId: getWatchlist
+      tags: [watchlist]
+      summary: Get all stocks in the watchlist
+      responses:
+        "200":
+          description: Watchlist with live prices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WatchlistItem"
+                required: [items]
+    post:
+      operationId: addToWatchlist
+      tags: [watchlist]
+      summary: Add a stock to the watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddToWatchlistBody"
+      responses:
+        "201":
+          description: Stock added to watchlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistItem"
+
+  /watchlist/{symbol}:
+    delete:
+      operationId: removeFromWatchlist
+      tags: [watchlist]
+      summary: Remove a stock from the watchlist
+      parameters:
+        - in: path
+          name: symbol
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stock removed from watchlist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +455,252 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    IndexQuote:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        previousClose:
+          type: number
+      required: [symbol, name, price, change, changePercent, previousClose]
+
+    StockQuote:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        previousClose:
+          type: number
+        volume:
+          type: number
+        marketCap:
+          type: number
+        fiftyTwoWeekHigh:
+          type: number
+        fiftyTwoWeekLow:
+          type: number
+        sector:
+          type: string
+        industry:
+          type: string
+      required: [symbol, name, exchange, price, change, changePercent, open, high, low, previousClose, volume]
+
+    StockSearchResult:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: string
+      required: [symbol, name, exchange]
+
+    StockFundamentals:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        marketCap:
+          type: number
+        enterpriseValue:
+          type: number
+        pe:
+          type: number
+          description: Price to Earnings ratio (trailing)
+        forwardPe:
+          type: number
+        pb:
+          type: number
+          description: Price to Book ratio
+        ps:
+          type: number
+          description: Price to Sales ratio
+        eps:
+          type: number
+          description: Earnings Per Share (trailing 12 months)
+        epsGrowth:
+          type: number
+          description: EPS growth YoY (%)
+        dividendYield:
+          type: number
+        dividendRate:
+          type: number
+        payoutRatio:
+          type: number
+        roe:
+          type: number
+          description: Return on Equity (%)
+        roa:
+          type: number
+          description: Return on Assets (%)
+        debtToEquity:
+          type: number
+        currentRatio:
+          type: number
+        quickRatio:
+          type: number
+        grossMargins:
+          type: number
+        operatingMargins:
+          type: number
+        profitMargins:
+          type: number
+        revenue:
+          type: number
+        revenueGrowth:
+          type: number
+        ebitda:
+          type: number
+        freeCashflow:
+          type: number
+        operatingCashflow:
+          type: number
+        bookValue:
+          type: number
+        analystRating:
+          type: string
+        targetPrice:
+          type: number
+        beta:
+          type: number
+        sharesOutstanding:
+          type: number
+        float:
+          type: number
+        insiderPercent:
+          type: number
+        institutionPercent:
+          type: number
+      required: [symbol, name]
+
+    Candle:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+      required: [timestamp, open, high, low, close, volume]
+
+    ScreenerStock:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        sector:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        marketCap:
+          type: number
+        pe:
+          type: number
+        pb:
+          type: number
+        dividendYield:
+          type: number
+        roe:
+          type: number
+        volume:
+          type: number
+        eps:
+          type: number
+      required: [symbol, name, exchange, price, change, changePercent]
+
+    SectorSummary:
+      type: object
+      properties:
+        sector:
+          type: string
+        stockCount:
+          type: integer
+        avgPe:
+          type: number
+        avgChangePercent:
+          type: number
+        topStock:
+          type: string
+      required: [sector, stockCount]
+
+    WatchlistItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        addedAt:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+      required: [id, symbol, name, exchange, addedAt]
+
+    AddToWatchlistBody:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+      required: [symbol, name, exchange]

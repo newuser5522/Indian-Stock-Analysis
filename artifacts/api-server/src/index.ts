@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { warmCache } from "./routes/market";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,10 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  warmCache().then(() => {
+    logger.info("Cache warmed up");
+  }).catch((e) => {
+    logger.warn({ err: e }, "Cache warm-up failed (non-fatal)");
+  });
 });
