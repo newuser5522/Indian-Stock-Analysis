@@ -1,0 +1,28 @@
+kind = "web"
+  previewPath = "/nextjs/"
+  title = "Indian Stock Screener (Next.js)"
+  version = "1.0.0"
+  id = "artifacts/nextjs-screener"
+  router = "path"
+
+  [[integratedSkills]]
+  name = "react-vite"
+  version = "1.0.0"
+
+  [[services]]
+  name = "web"
+  paths = [ "/nextjs/" ]
+  localPort = 24507
+
+  [services.development]
+  run = "pnpm --filter @workspace/nextjs-screener run dev"
+
+  [services.production]
+  build = [ "pnpm", "--filter", "@workspace/nextjs-screener", "run", "build" ]
+  run = "pnpm --filter @workspace/nextjs-screener run start"
+
+  [services.env]
+  PORT = "24507"
+  BASE_PATH = "/nextjs"
+  NEXT_PUBLIC_BASE_PATH = "/nextjs"
+  
