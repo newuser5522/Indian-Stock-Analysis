@@ -11,13 +11,19 @@ import {
   Menu,
   X,
   ChevronRight,
+  Briefcase,
+  Globe2,
+  Newspaper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Market", icon: TrendingUp },
+  { href: "/sectors", label: "Sectors", icon: Globe2 },
   { href: "/screener", label: "Screener", icon: Search },
   { href: "/watchlist", label: "Watchlist", icon: Star },
+  { href: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { href: "/news", label: "News", icon: Newspaper },
 ];
 
 function NavItem({
@@ -123,7 +129,7 @@ export function Sidebar() {
         {/* Footer */}
         <div className="p-3 border-t border-sidebar-border">
           <p className="text-[10px] text-muted-foreground text-center">
-            NSE · BSE · Live data
+            NSE · BSE · Live data · v2.0
           </p>
         </div>
       </aside>

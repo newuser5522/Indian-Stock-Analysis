@@ -1,50 +1,40 @@
 {
   "pages": {
+    "/api/market/sector-indices/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/market/sector-indices/route.js"
+    ],
+    "/api/market/news/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/market/news/route.js"
+    ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/page": [
+    "/sectors/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/sectors/page.js"
     ],
-    "/api/market/overview/route": [
+    "/api/market/sector-performance/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/market/overview/route.js"
+      "static/chunks/app/api/market/sector-performance/route.js"
     ],
-    "/api/market/top-gainers/route": [
+    "/api/market/heatmap/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/market/top-gainers/route.js"
+      "static/chunks/app/api/market/heatmap/route.js"
     ],
-    "/api/market/most-active/route": [
+    "/news/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/market/most-active/route.js"
-    ],
-    "/api/market/top-losers/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/top-losers/route.js"
-    ],
-    "/screener/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/screener/page.js"
-    ],
-    "/api/screener/sectors/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/screener/sectors/route.js"
-    ],
-    "/api/screener/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/screener/route.js"
+      "static/chunks/app/news/page.js"
     ]
   }
 }
