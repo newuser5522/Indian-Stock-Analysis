@@ -16,10 +16,20 @@ export async function GET() {
 
     const data = rows.map((r) => {
       const q = quoteMap.get(r.symbol);
+      const currentPrice = q?.regularMarketPrice;
+      const addedPrice = r.addedPrice ?? undefined;
+      const priceDiff = currentPrice != null && addedPrice != null ? currentPrice - addedPrice : undefined;
+      const pricePct = priceDiff != null && addedPrice != null && addedPrice > 0
+        ? (priceDiff / addedPrice) * 100
+        : undefined;
       return {
         symbol: r.symbol,
         addedAt: r.addedAt,
-        regularMarketPrice: q?.regularMarketPrice,
+        addedPrice,
+        currentPrice,
+        priceDiff,
+        pricePct,
+        regularMarketPrice: currentPrice,
         regularMarketChange: q?.regularMarketChange,
         regularMarketChangePercent: q?.regularMarketChangePercent,
         shortName: q?.shortName,
@@ -39,7 +49,16 @@ export async function POST(req: NextRequest) {
     const symbol = body.symbol?.trim();
     if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
-    await db.insert(watchlistTable).values({ symbol }).onConflictDoNothing();
+    // Fetch current price to store as addedPrice
+    let addedPrice: number | undefined;
+    try {
+      const quotes = await fetchQuotes([symbol]);
+      addedPrice = quotes[0]?.regularMarketPrice ?? undefined;
+    } catch { /* optional */ }
+
+    await db.insert(watchlistTable)
+      .values({ symbol, name: symbol, exchange: "NSE", addedPrice })
+      .onConflictDoNothing();
     return NextResponse.json({ symbol }, { status: 201 });
   } catch (err) {
     console.error("watchlist POST error", err);

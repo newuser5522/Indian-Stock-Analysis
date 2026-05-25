@@ -1,8 +1,1 @@
-{
-  "/api/market/sector-indices/route": "app/api/market/sector-indices/route.js",
-  "/api/market/news/route": "app/api/market/news/route.js",
-  "/api/market/sector-performance/route": "app/api/market/sector-performance/route.js",
-  "/api/market/heatmap/route": "app/api/market/heatmap/route.js",
-  "/news/page": "app/news/page.js",
-  "/sectors/page": "app/sectors/page.js"
-}
+{}

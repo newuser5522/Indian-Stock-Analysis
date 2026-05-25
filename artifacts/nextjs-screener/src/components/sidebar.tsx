@@ -14,16 +14,23 @@ import {
   Briefcase,
   Globe2,
   Newspaper,
+  Zap,
+  CalendarDays,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV = [
   { href: "/", label: "Market", icon: TrendingUp },
   { href: "/sectors", label: "Sectors", icon: Globe2 },
   { href: "/screener", label: "Screener", icon: Search },
+  { href: "/scans", label: "Scans", icon: Zap },
   { href: "/watchlist", label: "Watchlist", icon: Star },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/news", label: "News", icon: Newspaper },
+  { href: "/alerts", label: "Alerts", icon: Bell },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
 ];
 
 function NavItem({
@@ -63,7 +70,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile hamburger */}
       <button
         className="fixed top-4 left-4 z-[60] flex h-9 w-9 items-center justify-center rounded-md border border-sidebar-border bg-sidebar text-sidebar-foreground md:hidden"
         onClick={() => setOpen((o) => !o)}
@@ -72,7 +78,6 @@ export function Sidebar() {
         {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
 
-      {/* Backdrop */}
       {open && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
@@ -80,7 +85,6 @@ export function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cn(
           "shrink-0 fixed inset-y-0 left-0 z-50 flex flex-col bg-sidebar border-r border-sidebar-border transition-transform duration-200",
@@ -127,8 +131,9 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="p-3 border-t border-sidebar-border">
-          <p className="text-[10px] text-muted-foreground text-center">
+        <div className="p-3 border-t border-sidebar-border space-y-1">
+          <ThemeToggle />
+          <p className="text-[10px] text-muted-foreground text-center pt-1">
             NSE · BSE · Live data · v2.0
           </p>
         </div>

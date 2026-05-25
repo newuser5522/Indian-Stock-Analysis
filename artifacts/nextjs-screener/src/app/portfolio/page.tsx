@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Briefcase, Plus, Trash2, TrendingUp, TrendingDown, Search, X
+  Briefcase, Plus, Trash2, TrendingUp, TrendingDown, Search, X, ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,27 @@ const PIE_COLORS = [
   "#f97316","#ec4899","#14b8a6","#3b82f6","#84cc16",
 ];
 
+// Approximate sector betas (NSE sector averages)
+const SECTOR_BETAS: Record<string, number> = {
+  Banking: 1.25, Finance: 1.20, IT: 0.90, Pharma: 0.70, FMCG: 0.60,
+  Energy: 1.10, Auto: 1.15, Metals: 1.30, Infra: 1.20, Realty: 1.40,
+  Telecom: 0.85, Default: 1.0,
+};
+
+function getSectorBeta(symbol: string): number {
+  const s = symbol.toUpperCase();
+  if (/HDFCBANK|ICICIBANK|SBIN|KOTAKBANK|AXISBANK|BANDHAN|AUBANK/.test(s)) return SECTOR_BETAS.Banking;
+  if (/TCS|INFY|WIPRO|HCLTECH|TECHM|COFORGE|MPHASIS|LTTS|OFSS/.test(s)) return SECTOR_BETAS.IT;
+  if (/SUNPHARMA|DRREDDY|CIPLA|DIVISLAB|LUPIN|BIOCON|AUROPHARMA/.test(s)) return SECTOR_BETAS.Pharma;
+  if (/HINDUNILVR|ITC|NESTLEIND|BRITANNIA|DABUR|MARICO/.test(s)) return SECTOR_BETAS.FMCG;
+  if (/RELIANCE|ONGC|BPCL|IOC|GAIL|PETRONET/.test(s)) return SECTOR_BETAS.Energy;
+  if (/MARUTI|TATAMOTORS|M&M|BAJAJ-AUTO|HEROMOTOCO|EICHERMOT/.test(s)) return SECTOR_BETAS.Auto;
+  if (/TATASTEEL|JSWSTEEL|HINDALCO|VEDL|SAIL|NMDC/.test(s)) return SECTOR_BETAS.Metals;
+  if (/DLF|GODREJPROP|OBEROIRLTY/.test(s)) return SECTOR_BETAS.Realty;
+  if (/LT|ADANIPORTS|ADANIENT/.test(s)) return SECTOR_BETAS.Infra;
+  return SECTOR_BETAS.Default;
+}
+
 function fmt(n: number | null | undefined, decimals = 2): string {
   if (n == null) return "—";
   return n.toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -54,9 +76,12 @@ function fmtL(n: number | null | undefined): string {
   return `₹${lakh.toFixed(2)}L`;
 }
 
+type Tab = "holdings" | "risk" | "allocation";
+
 export default function PortfolioPage() {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
+  const [tab, setTab] = useState<Tab>("holdings");
   const [searchQ, setSearchQ] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selected, setSelected] = useState<SearchResult | null>(null);
@@ -96,29 +121,71 @@ export default function PortfolioPage() {
   const handleAdd = () => {
     if (!selected || !form.quantity || !form.avgPrice) return toast.error("Fill all required fields");
     addMutation.mutate({
-      symbol: selected.symbol,
-      name: selected.shortname,
-      exchange: selected.exchDisp,
-      quantity: parseFloat(form.quantity),
-      avgPrice: parseFloat(form.avgPrice),
-      purchaseDate: form.purchaseDate || null,
-      notes: form.notes || null,
+      symbol: selected.symbol, name: selected.shortname, exchange: selected.exchDisp,
+      quantity: parseFloat(form.quantity), avgPrice: parseFloat(form.avgPrice),
+      purchaseDate: form.purchaseDate || null, notes: form.notes || null,
     });
   };
 
-  // Summary stats
+  // Portfolio calculations
   const totalInvested = holdings.reduce((s, h) => s + h.invested, 0);
   const totalCurrent = holdings.reduce((s, h) => s + (h.currentValue ?? h.invested), 0);
   const totalPnl = totalCurrent - totalInvested;
   const totalPnlPct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
 
-  // Sector exposure for pie chart
+  // Risk calculations
+  const riskMetrics = useMemo(() => {
+    if (holdings.length === 0) return null;
+
+    // Weighted portfolio beta
+    const weightedBeta = holdings.reduce((sum, h) => {
+      const weight = (h.currentValue ?? h.invested) / (totalCurrent || 1);
+      return sum + getSectorBeta(h.symbol) * weight;
+    }, 0);
+
+    // Daily returns approximation from today's change
+    const dailyReturns = holdings.map(h => (h.regularMarketChangePercent ?? 0) / 100);
+    const dailyPnlPct = dailyReturns.reduce((s, r, i) => {
+      const weight = (holdings[i].currentValue ?? holdings[i].invested) / (totalCurrent || 1);
+      return s + r * weight;
+    }, 0);
+
+    // Annualized volatility estimate (using cross-sectional dispersion as proxy)
+    const avgDailyReturn = dailyPnlPct;
+    const variance = dailyReturns.reduce((s, r, i) => {
+      const weight = (holdings[i].currentValue ?? holdings[i].invested) / (totalCurrent || 1);
+      return s + weight * Math.pow(r - avgDailyReturn, 2);
+    }, 0);
+    const dailyVol = Math.sqrt(variance);
+    const annualVol = dailyVol * Math.sqrt(252) * 100;
+
+    // Value at Risk (95% CI, parametric) = Z × σ × Portfolio Value
+    const z95 = 1.645;
+    const varINR = z95 * dailyVol * totalCurrent;
+    const varPct = z95 * dailyVol * 100;
+
+    // Max drawdown from individual stock P&Ls (worst single holding % loss)
+    const maxLoss = Math.min(...holdings.map(h => h.pnlPct ?? 0));
+
+    // Concentration risk (max holding weight)
+    const maxWeight = Math.max(...holdings.map(h => (h.currentValue ?? h.invested) / (totalCurrent || 1))) * 100;
+
+    return { weightedBeta, annualVol, varINR, varPct, dailyPnlPct: dailyPnlPct * 100, maxLoss, maxWeight };
+  }, [holdings, totalCurrent]);
+
+  // Allocation by exchange/sector
   const sectorMap: Record<string, number> = {};
   for (const h of holdings) {
     const sector = h.exchange || "Other";
     sectorMap[sector] = (sectorMap[sector] ?? 0) + (h.currentValue ?? h.invested);
   }
   const pieData = Object.entries(sectorMap).map(([name, value]) => ({ name, value }));
+
+  // PnL bar chart data
+  const pnlBarData = holdings.map(h => ({
+    name: displaySymbol(h.symbol),
+    pnlPct: h.pnlPct ?? 0,
+  })).sort((a, b) => b.pnlPct - a.pnlPct);
 
   const statCard = (label: string, value: string, sub?: string, subColor?: string) => (
     <div className="rounded-lg border bg-card p-4">
@@ -136,7 +203,7 @@ export default function PortfolioPage() {
             <Briefcase className="h-5 w-5 text-primary" />
             Portfolio
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Track your holdings in Indian Rupees</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Track holdings, P&L, and risk metrics in INR</p>
         </div>
         <Button size="sm" onClick={() => setShowAdd(v => !v)}>
           {showAdd ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -148,16 +215,11 @@ export default function PortfolioPage() {
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {statCard("Total Invested", fmtL(totalInvested))}
         {statCard("Current Value", fmtL(totalCurrent))}
-        {statCard(
-          "Total P&L",
-          fmtL(totalPnl),
-          `${totalPnlPct >= 0 ? "+" : ""}${fmt(totalPnlPct)}%`,
-          totalPnl >= 0 ? "text-green-500" : "text-red-500"
-        )}
+        {statCard("Total P&L", fmtL(totalPnl), `${totalPnlPct >= 0 ? "+" : ""}${fmt(totalPnlPct)}%`, totalPnl >= 0 ? "text-green-500" : "text-red-500")}
         {statCard("Holdings", String(holdings.length))}
       </div>
 
-      {/* Add holding panel */}
+      {/* Add holding */}
       {showAdd && (
         <div className="rounded-lg border bg-card p-4 space-y-4">
           <h2 className="font-semibold text-sm">Add a Holding</h2>
@@ -189,41 +251,39 @@ export default function PortfolioPage() {
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-primary">{displaySymbol(selected.symbol)}</span>
                 <span className="text-sm text-muted-foreground">{selected.shortname}</span>
-                <button className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(null)}>
-                  Change stock
-                </button>
+                <button className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(null)}>Change stock</button>
               </div>
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Quantity *</label>
-                  <Input type="number" min="0.01" step="0.01" placeholder="e.g. 10"
-                    value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Avg Buy Price (₹) *</label>
-                  <Input type="number" min="0.01" step="0.01" placeholder="e.g. 2500"
-                    value={form.avgPrice} onChange={e => setForm(f => ({ ...f, avgPrice: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Purchase Date</label>
-                  <Input type="date" value={form.purchaseDate} onChange={e => setForm(f => ({ ...f, purchaseDate: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Notes</label>
-                  <Input placeholder="Optional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-                </div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Quantity *</label>
+                  <Input type="number" min="0.01" step="0.01" placeholder="e.g. 10" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Avg Buy Price (₹) *</label>
+                  <Input type="number" min="0.01" step="0.01" placeholder="e.g. 2500" value={form.avgPrice} onChange={e => setForm(f => ({ ...f, avgPrice: e.target.value }))} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Purchase Date</label>
+                  <Input type="date" value={form.purchaseDate} onChange={e => setForm(f => ({ ...f, purchaseDate: e.target.value }))} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Notes</label>
+                  <Input placeholder="Optional" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
               </div>
-              <Button size="sm" onClick={handleAdd} disabled={addMutation.isPending}>
-                <Plus className="h-4 w-4" />Add Holding
-              </Button>
+              <Button size="sm" onClick={handleAdd} disabled={addMutation.isPending}><Plus className="h-4 w-4" />Add Holding</Button>
             </div>
           )}
         </div>
       )}
 
-      {/* Holdings table + pie */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-lg border bg-card overflow-hidden">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b">
+        {(["holdings", "risk", "allocation"] as Tab[]).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+              tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}>
+            {t === "risk" ? "Risk Analytics" : t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Holdings tab */}
+      {tab === "holdings" && (
+        <div className="rounded-lg border bg-card overflow-hidden">
           <div className="px-4 py-3 border-b flex items-center gap-2">
             <span className="font-semibold text-sm">Holdings</span>
             <span className="ml-auto text-xs text-muted-foreground">{holdings.length} stocks</span>
@@ -234,7 +294,6 @@ export default function PortfolioPage() {
             <div className="py-20 text-center">
               <Briefcase className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
               <p className="font-medium text-muted-foreground">No holdings yet</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Add your first stock above</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -284,44 +343,148 @@ export default function PortfolioPage() {
             </div>
           )}
         </div>
+      )}
 
-        {/* Pie chart */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="font-semibold text-sm mb-4">Allocation</h3>
-          {holdings.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-muted-foreground text-xs">No data</div>
+      {/* Risk Analytics tab */}
+      {tab === "risk" && (
+        <div className="space-y-4">
+          {!riskMetrics || holdings.length === 0 ? (
+            <div className="py-16 text-center rounded-lg border bg-card">
+              <ShieldAlert className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+              <p className="text-muted-foreground">Add holdings to see risk analytics</p>
+            </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2}>
-                  {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v: number) => [`₹${(v / 100000).toFixed(2)}L`, ""]}
-                  contentStyle={{ backgroundColor: "hsl(222,47%,10%)", border: "1px solid hsl(217,33%,17%)", borderRadius: 6, fontSize: 11 }} />
-                <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
+            <>
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Portfolio Beta (β)</div>
+                  <div className="text-2xl font-bold">{riskMetrics.weightedBeta.toFixed(2)}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {riskMetrics.weightedBeta > 1.2 ? "⚠️ High risk vs Nifty" :
+                     riskMetrics.weightedBeta < 0.8 ? "🛡️ Defensive portfolio" :
+                     "⚖️ Market-aligned"}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Annualized Volatility (σ)</div>
+                  <div className="text-2xl font-bold">{riskMetrics.annualVol.toFixed(1)}%</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {riskMetrics.annualVol > 30 ? "⚠️ High volatility" : riskMetrics.annualVol < 15 ? "🟢 Low volatility" : "🟡 Moderate volatility"}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Value at Risk (95% CI, 1-day)</div>
+                  <div className="text-2xl font-bold text-red-400">{fmtL(riskMetrics.varINR)}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Max daily loss at 95% confidence: {riskMetrics.varPct.toFixed(2)}%
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Today&apos;s Portfolio Return</div>
+                  <div className={`text-2xl font-bold tabular-nums ${changeColor(riskMetrics.dailyPnlPct)}`}>
+                    {riskMetrics.dailyPnlPct >= 0 ? "+" : ""}{riskMetrics.dailyPnlPct.toFixed(2)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Weighted daily P&L</div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Worst Holding P&L</div>
+                  <div className={`text-2xl font-bold tabular-nums ${changeColor(riskMetrics.maxLoss)}`}>
+                    {riskMetrics.maxLoss.toFixed(2)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Max single-stock drawdown</div>
+                </div>
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="text-xs text-muted-foreground mb-1">Concentration Risk</div>
+                  <div className={`text-2xl font-bold ${riskMetrics.maxWeight > 40 ? "text-orange-400" : "text-green-400"}`}>
+                    {riskMetrics.maxWeight.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {riskMetrics.maxWeight > 40 ? "⚠️ Concentrated in one stock" : "✅ Well diversified"}
+                  </div>
+                </div>
+              </div>
 
-          {/* P&L summary */}
-          {holdings.length > 0 && (
-            <div className="mt-3 space-y-2 border-t pt-3">
+              {/* P&L bar chart */}
+              {pnlBarData.length > 0 && (
+                <div className="rounded-lg border bg-card p-4">
+                  <h3 className="font-semibold text-sm mb-4">P&L by Holding (%)</h3>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={pnlBarData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,17%)" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(215,20%,55%)" }} />
+                      <YAxis tick={{ fontSize: 10, fill: "hsl(215,20%,55%)" }} tickFormatter={v => `${v}%`} />
+                      <Tooltip formatter={(v: number) => [`${v.toFixed(2)}%`, "P&L"]}
+                        contentStyle={{ backgroundColor: "hsl(222,47%,10%)", border: "1px solid hsl(217,33%,17%)", borderRadius: 6, fontSize: 11 }} />
+                      <Bar dataKey="pnlPct" radius={[4, 4, 0, 0]}
+                        fill="hsl(199,89%,48%)"
+                        label={false}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 text-xs text-yellow-400">
+                ⚠️ Risk metrics are estimates using sector beta approximations and today&apos;s returns. For precise VaR, use historical daily returns over 1+ year.
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Allocation tab */}
+      {tab === "allocation" && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border bg-card p-4">
+            <h3 className="font-semibold text-sm mb-4">Exchange Allocation</h3>
+            {holdings.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-xs">No data</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={2}>
+                    {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [`₹${(v / 100000).toFixed(2)}L`, ""]}
+                    contentStyle={{ backgroundColor: "hsl(222,47%,10%)", border: "1px solid hsl(217,33%,17%)", borderRadius: 6, fontSize: 11 }} />
+                  <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <h3 className="font-semibold text-sm mb-4">Holdings Breakdown</h3>
+            <div className="space-y-2">
+              {holdings.map(h => {
+                const weight = totalCurrent > 0 ? ((h.currentValue ?? h.invested) / totalCurrent) * 100 : 0;
+                return (
+                  <div key={h.id} className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-semibold">{displaySymbol(h.symbol)}</span>
+                        <span className="text-muted-foreground">{weight.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${weight}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 pt-3 border-t space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Today</span>
-                <span className={changeColor(totalPnl)}>
-                  {totalPnl >= 0 ? "+" : ""}₹{fmt(totalPnl, 0)}
-                </span>
+                <span className="text-muted-foreground">P&L</span>
+                <span className={changeColor(totalPnl)}>{totalPnl >= 0 ? "+" : ""}₹{fmt(totalPnl, 0)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Overall Return</span>
-                <span className={changeColor(totalPnlPct)}>
-                  {totalPnlPct >= 0 ? "+" : ""}{fmt(totalPnlPct)}%
-                </span>
+                <span className={changeColor(totalPnlPct)}>{totalPnlPct >= 0 ? "+" : ""}{fmt(totalPnlPct)}%</span>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

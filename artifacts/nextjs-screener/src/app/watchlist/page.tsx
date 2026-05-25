@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Star, Plus, Trash2, Search } from "lucide-react";
+import { Star, Plus, Trash2, Search, TrendingUp, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,10 @@ import { toast } from "sonner";
 interface WatchlistItem {
   symbol: string;
   addedAt: string;
+  addedPrice?: number;
+  currentPrice?: number;
+  priceDiff?: number;
+  pricePct?: number;
   regularMarketPrice?: number;
   regularMarketChange?: number;
   regularMarketChangePercent?: number;
@@ -28,6 +32,7 @@ export default function WatchlistPage() {
   const { data: watchlist, isLoading } = useQuery<WatchlistItem[]>({
     queryKey: ["watchlist"],
     queryFn: () => fetch(apiUrl("/watchlist")).then((r) => r.json()),
+    refetchInterval: 60_000,
   });
 
   const addMutation = useMutation({
@@ -58,6 +63,12 @@ export default function WatchlistPage() {
     finally { setIsSearching(false); }
   };
 
+  const totalItems = watchlist?.length ?? 0;
+  const totalPnlItems = watchlist?.filter(w => w.pricePct != null) ?? [];
+  const avgPnlPct = totalPnlItems.length > 0
+    ? totalPnlItems.reduce((s, w) => s + (w.pricePct ?? 0), 0) / totalPnlItems.length
+    : null;
+
   return (
     <div className="space-y-5 max-w-screen-xl">
       <div>
@@ -65,8 +76,38 @@ export default function WatchlistPage() {
           <Star className="h-5 w-5 text-primary" />
           Watchlist
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Track your favourite stocks</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Track your favourite stocks — added price vs current price</p>
       </div>
+
+      {/* Summary bar */}
+      {totalItems > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border bg-card p-3">
+            <div className="text-xs text-muted-foreground mb-1">Watching</div>
+            <div className="text-xl font-bold">{totalItems} stocks</div>
+          </div>
+          {avgPnlPct != null && (
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground mb-1">Avg P&L Since Added</div>
+              <div className={`text-xl font-bold tabular-nums ${changeColor(avgPnlPct)}`}>
+                {avgPnlPct >= 0 ? "+" : ""}{avgPnlPct.toFixed(2)}%
+              </div>
+            </div>
+          )}
+          <div className="rounded-lg border bg-card p-3">
+            <div className="text-xs text-muted-foreground mb-1">Gainers Today</div>
+            <div className="text-xl font-bold text-green-500">
+              {watchlist?.filter(w => (w.regularMarketChangePercent ?? 0) > 0).length ?? 0}
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <div className="text-xs text-muted-foreground mb-1">Losers Today</div>
+            <div className="text-xl font-bold text-red-500">
+              {watchlist?.filter(w => (w.regularMarketChangePercent ?? 0) < 0).length ?? 0}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add stock */}
       <div className="rounded-lg border bg-card p-4">
@@ -104,7 +145,7 @@ export default function WatchlistPage() {
         )}
       </div>
 
-      {/* Watchlist */}
+      {/* Watchlist table */}
       <div className="rounded-lg border bg-card overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground text-sm">Loading…</div>
@@ -115,46 +156,71 @@ export default function WatchlistPage() {
             <p className="text-xs text-muted-foreground/60 mt-1">Search for stocks above to add them</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Price</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Change</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Chg%</th>
-                <th className="px-4 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(watchlist ?? []).map((item) => {
-                const chg = item.regularMarketChangePercent;
-                return (
-                  <tr key={item.symbol} className="border-b hover:bg-accent/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link href={`/stock/${encodeURIComponent(item.symbol)}`} className="group">
-                        <div className="font-semibold group-hover:text-primary transition-colors">{displaySymbol(item.symbol)}</div>
-                        <div className="text-xs text-muted-foreground">{item.shortName ?? ""}</div>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-bold">{formatPrice(item.regularMarketPrice)}</td>
-                    <td className={`px-4 py-3 text-right tabular-nums text-sm font-medium ${changeColor(item.regularMarketChange)}`}>
-                      {item.regularMarketChange != null ? `${item.regularMarketChange >= 0 ? "+" : ""}${item.regularMarketChange.toFixed(2)}` : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${changeBg(chg)}`}>
-                        {formatChangePercent(chg)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 transition-colors" onClick={() => removeMutation.mutate(item.symbol)} disabled={removeMutation.isPending}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Added At</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Added Price</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Current</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Since Added</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Today</th>
+                  <th className="px-4 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(watchlist ?? []).map((item) => {
+                  const dayChg = item.regularMarketChangePercent;
+                  const sinceAdded = item.pricePct;
+                  const priceDiff = item.priceDiff;
+                  const isUpSinceAdded = (sinceAdded ?? 0) >= 0;
+                  return (
+                    <tr key={item.symbol} className="border-b hover:bg-accent/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <Link href={`/stock/${encodeURIComponent(item.symbol)}`} className="group">
+                          <div className="font-semibold group-hover:text-primary transition-colors">{displaySymbol(item.symbol)}</div>
+                          <div className="text-xs text-muted-foreground">{item.shortName ?? ""}</div>
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs text-muted-foreground tabular-nums">
+                        {new Date(item.addedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-sm">
+                        {item.addedPrice != null ? `₹${item.addedPrice.toFixed(2)}` : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums font-bold">{formatPrice(item.currentPrice)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {sinceAdded != null ? (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${changeBg(sinceAdded)}`}>
+                              {isUpSinceAdded ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                              {sinceAdded >= 0 ? "+" : ""}{sinceAdded.toFixed(2)}%
+                            </span>
+                            {priceDiff != null && (
+                              <span className={`text-[10px] tabular-nums ${changeColor(priceDiff)}`}>
+                                {priceDiff >= 0 ? "+" : ""}₹{priceDiff.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        ) : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${changeBg(dayChg)}`}>
+                          {formatChangePercent(dayChg)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-red-500 transition-colors" onClick={() => removeMutation.mutate(item.symbol)} disabled={removeMutation.isPending}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

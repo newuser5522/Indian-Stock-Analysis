@@ -1,13 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, Flame, DollarSign, Globe } from "lucide-react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/api-url";
 import {
   formatPrice,
   formatChangePercent,
-  formatVolume,
   changeColor,
   changeBg,
   displaySymbol,
@@ -22,6 +22,25 @@ interface Quote {
   regularMarketChangePercent?: number;
   regularMarketVolume?: number;
   marketCap?: number;
+}
+
+interface MultiAsset {
+  symbol: string;
+  name: string;
+  type: string;
+  unit: string;
+  price: number;
+  change: number;
+  changePct: number;
+}
+
+interface GlobalIndex {
+  symbol: string;
+  name: string;
+  region: string;
+  price: number;
+  change: number;
+  changePct: number;
 }
 
 function IndexCard({ q }: { q: Quote }) {
@@ -45,6 +64,56 @@ function IndexCard({ q }: { q: Quote }) {
         {q.regularMarketChange != null
           ? `${chg >= 0 ? "+" : ""}${q.regularMarketChange.toFixed(2)} today`
           : ""}
+      </div>
+    </div>
+  );
+}
+
+function AssetCard({ a }: { a: MultiAsset }) {
+  const isPos = a.changePct >= 0;
+  const iconMap: Record<string, string> = {
+    commodity: "🛢️",
+    currency: "💱",
+    bond: "📊",
+    volatility: "⚡",
+  };
+  return (
+    <div className="rounded-lg border bg-card p-3 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate flex items-center gap-1">
+          <span>{iconMap[a.type] ?? "📈"}</span>
+          {a.name}
+        </span>
+        <span className={`text-[10px] font-medium rounded-full px-1.5 py-0.5 shrink-0 ${changeBg(a.changePct)}`}>
+          {isPos ? "+" : ""}{a.changePct.toFixed(2)}%
+        </span>
+      </div>
+      <div className="text-lg font-bold tabular-nums">
+        {a.price > 0 ? a.price.toFixed(a.type === "bond" || a.type === "volatility" ? 2 : 2) : "—"}
+        {a.unit && <span className="text-[10px] text-muted-foreground ml-1">{a.unit}</span>}
+      </div>
+      <div className={`text-xs tabular-nums ${changeColor(a.changePct)}`}>
+        {isPos ? "+" : ""}{a.change.toFixed(2)} today
+      </div>
+    </div>
+  );
+}
+
+function GlobalCard({ g }: { g: GlobalIndex }) {
+  const isPos = g.changePct >= 0;
+  return (
+    <div className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-accent/30 transition-colors">
+      <div>
+        <div className="text-sm font-semibold">{g.name}</div>
+        <div className="text-xs text-muted-foreground">{g.symbol}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-sm font-bold tabular-nums">
+          {g.price > 1000 ? g.price.toLocaleString("en-US", { maximumFractionDigits: 0 }) : g.price.toFixed(2)}
+        </div>
+        <div className={`text-xs tabular-nums ${changeColor(g.changePct)}`}>
+          {isPos ? "+" : ""}{g.changePct.toFixed(2)}%
+        </div>
       </div>
     </div>
   );
@@ -75,17 +144,9 @@ function StockRow({ q, rank }: { q: Quote; rank: number }) {
 }
 
 function MoverSection({
-  title,
-  icon: Icon,
-  iconClass,
-  data,
-  isLoading,
+  title, icon: Icon, iconClass, data, isLoading,
 }: {
-  title: string;
-  icon: React.ElementType;
-  iconClass: string;
-  data?: Quote[];
-  isLoading: boolean;
+  title: string; icon: React.ElementType; iconClass: string; data?: Quote[]; isLoading: boolean;
 }) {
   return (
     <div className="rounded-lg border bg-card flex flex-col">
@@ -114,7 +175,12 @@ function MoverSection({
   );
 }
 
+const REGIONS = ["US", "EU", "Asia"] as const;
+type Region = (typeof REGIONS)[number];
+
 export default function MarketPage() {
+  const [globalRegion, setGlobalRegion] = useState<Region>("US");
+
   const { data: indices, isLoading: indicesLoading } = useQuery<Quote[]>({
     queryKey: ["market", "overview"],
     queryFn: () => fetch(apiUrl("/market/overview")).then((r) => r.json()),
@@ -135,46 +201,115 @@ export default function MarketPage() {
     queryFn: () => fetch(apiUrl("/market/most-active")).then((r) => r.json()),
   });
 
+  const { data: multiAsset, isLoading: multiLoading } = useQuery<MultiAsset[]>({
+    queryKey: ["market", "multi-asset"],
+    queryFn: () => fetch(apiUrl("/market/multi-asset")).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+
+  const { data: globalIndices, isLoading: globalLoading } = useQuery<GlobalIndex[]>({
+    queryKey: ["market", "global"],
+    queryFn: () => fetch(apiUrl("/market/global")).then((r) => r.json()),
+    staleTime: 2 * 60_000,
+  });
+
+  const vix = multiAsset?.find((a) => a.symbol === "^INDIAVIX");
+  const otherAssets = multiAsset?.filter((a) => a.symbol !== "^INDIAVIX") ?? [];
+  const regionIndices = (globalIndices ?? []).filter((g) => g.region === globalRegion);
+
   return (
     <div className="space-y-6 max-w-screen-xl">
       {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Market Overview</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Live NSE/BSE indices, multi-asset, and global markets</p>
+        </div>
+        {vix && (
+          <div className={`rounded-lg border px-4 py-2 text-center shrink-0 ${vix.changePct >= 0 ? "border-orange-500/40 bg-orange-500/10" : "border-green-500/40 bg-green-500/10"}`}>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">⚡ India VIX</div>
+            <div className="text-xl font-bold tabular-nums mt-0.5">{vix.price.toFixed(2)}</div>
+            <div className={`text-xs font-medium tabular-nums ${changeColor(vix.changePct)}`}>
+              {vix.changePct >= 0 ? "+" : ""}{vix.changePct.toFixed(2)}%
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Indian Index cards */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Market Overview</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Live NSE/BSE indices and top movers</p>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Indian Indices</h2>
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+          {indicesLoading
+            ? [...Array(6)].map((_, i) => (
+                <div key={i} className="rounded-lg border bg-card p-4 h-[88px] animate-pulse" />
+              ))
+            : (indices ?? []).map((q) => <IndexCard key={q.symbol} q={q} />)}
+        </div>
       </div>
 
-      {/* Index cards */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
-        {indicesLoading
-          ? [...Array(6)].map((_, i) => (
-              <div key={i} className="rounded-lg border bg-card p-4 h-[88px] animate-pulse" />
-            ))
-          : (indices ?? []).map((q) => <IndexCard key={q.symbol} q={q} />)}
+      {/* Multi-Asset Section */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Commodities, Currencies & Bonds</h2>
+        </div>
+        {multiLoading ? (
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
+            {[...Array(7)].map((_, i) => (
+              <div key={i} className="rounded-lg border bg-card p-3 h-[84px] animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
+            {otherAssets.map((a) => <AssetCard key={a.symbol} a={a} />)}
+          </div>
+        )}
       </div>
 
-      {/* Top movers */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <MoverSection
-          title="Top Gainers"
-          icon={TrendingUp}
-          iconClass="text-green-500"
-          data={gainers}
-          isLoading={gainersLoading}
-        />
-        <MoverSection
-          title="Top Losers"
-          icon={TrendingDown}
-          iconClass="text-red-500"
-          data={losers}
-          isLoading={losersLoading}
-        />
-        <MoverSection
-          title="Most Active"
-          icon={Activity}
-          iconClass="text-primary"
-          data={active}
-          isLoading={activeLoading}
-        />
+      {/* Global Markets */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border bg-card flex flex-col lg:col-span-1">
+          <div className="flex items-center gap-2 px-4 py-3 border-b">
+            <Globe className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-semibold text-sm">Global Markets</h3>
+          </div>
+          <div className="flex gap-1 px-3 pt-2">
+            {REGIONS.map((r) => (
+              <button
+                key={r}
+                onClick={() => setGlobalRegion(r)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                  globalRegion === r
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 p-2">
+            {globalLoading ? (
+              <div className="space-y-1.5 p-2">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-12 rounded-md bg-accent/40 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {regionIndices.map((g) => <GlobalCard key={g.symbol} g={g} />)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Top movers */}
+        <div className="lg:col-span-2 grid gap-4 md:grid-cols-3">
+          <MoverSection title="Top Gainers" icon={TrendingUp} iconClass="text-green-500" data={gainers} isLoading={gainersLoading} />
+          <MoverSection title="Top Losers" icon={TrendingDown} iconClass="text-red-500" data={losers} isLoading={losersLoading} />
+          <MoverSection title="Most Active" icon={Activity} iconClass="text-primary" data={active} isLoading={activeLoading} />
+        </div>
       </div>
     </div>
   );

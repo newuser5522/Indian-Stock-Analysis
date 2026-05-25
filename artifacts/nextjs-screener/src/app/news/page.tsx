@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Newspaper, ExternalLink, Clock } from "lucide-react";
+import { Newspaper, ExternalLink, Clock, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { apiUrl } from "@/lib/api-url";
 
 interface NewsItem {
@@ -16,11 +16,38 @@ interface NewsItem {
 
 const CATEGORIES = ["All", "Macro", "Earnings", "Corporate", "Regulatory", "Market"] as const;
 type Category = (typeof CATEGORIES)[number];
+type Sentiment = "bullish" | "bearish" | "neutral";
 
 const MACRO_KW = ["rbi","repo rate","inflation","gdp","economy","fiscal","monetary","interest rate","credit policy","forex","rupee","dollar","import","export","trade deficit","budget","government","ministry","policy","niti aayog","election","geopolit"];
 const EARN_KW = ["q1","q2","q3","q4","profit","revenue","earnings","results","net income","ebitda","pat","quarterly","annual report","dividend","fy2","fy25","fy26","turnover","loss","income"];
 const CORP_KW = ["merger","acquisition","deal","board","ceo","ipo","buyback","stake","shares","fundraise","joint venture","partnership","subsidiary","demerger","listing","qip","fpo","rights issue"];
 const REG_KW = ["sebi","regulation","compliance","penalty","fine","nse","bse","circular","framework","guidelines","reform","tax","gst","ban","order","probe","investigation","court","tribunal"];
+
+// Sentiment NLP keyword lists
+const BULLISH_KW = [
+  "surge","rally","soar","rise","gain","jump","record","high","profit","growth","beat",
+  "upgrade","outperform","buy","strong","positive","boost","expand","recover","breakout",
+  "above","exceed","milestone","win","partner","order","contract","deal","revenue up",
+  "net profit","roaring","optimistic","bullish","overweight","accumulate","top picks",
+  "upside","beat estimates","raise target","dividend","bonus","buyback","up","green",
+];
+const BEARISH_KW = [
+  "fall","drop","decline","crash","sell","loss","weak","negative","miss","poor","below",
+  "cut","reduce","risk","concern","warning","downgrade","underperform","plunge","slump",
+  "worry","debt","default","fraud","probe","penalty","fine","ban","suspend","close","down",
+  "red","bearish","underweight","avoid","drag","write-off","impairment","resign","lawsuit",
+  "losses","declining","pressure","headwind","downside","miss estimates","downgrade",
+];
+
+function analyzeSentiment(title: string): Sentiment {
+  const t = title.toLowerCase();
+  let bull = 0, bear = 0;
+  for (const kw of BULLISH_KW) if (t.includes(kw)) bull++;
+  for (const kw of BEARISH_KW) if (t.includes(kw)) bear++;
+  if (bull > bear) return "bullish";
+  if (bear > bull) return "bearish";
+  return "neutral";
+}
 
 function classifyNews(title: string): Category {
   const t = title.toLowerCase();
@@ -47,9 +74,17 @@ const CATEGORY_COLOR: Record<Category, string> = {
   Market: "bg-secondary/60 text-muted-foreground",
 };
 
+const SENTIMENT_CONFIG: Record<Sentiment, { label: string; icon: React.ElementType; color: string; bg: string }> = {
+  bullish: { label: "Bullish", icon: TrendingUp, color: "text-green-400", bg: "bg-green-500/10 border border-green-500/30" },
+  bearish: { label: "Bearish", icon: TrendingDown, color: "text-red-400", bg: "bg-red-500/10 border border-red-500/30" },
+  neutral: { label: "Neutral", icon: Minus, color: "text-muted-foreground", bg: "bg-muted/60" },
+};
+
+type SentimentFilter = "all" | Sentiment;
+
 export default function NewsPage() {
   const [activeCategory, setActiveCategory] = useState<Category>("All");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sentimentFilter, setSentimentFilter] = useState<SentimentFilter>("all");
 
   const { data: news = [], isLoading } = useQuery<NewsItem[]>({
     queryKey: ["market", "news"],
@@ -57,11 +92,23 @@ export default function NewsPage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const classified = news.map(n => ({ ...n, category: classifyNews(n.title) }));
-  const filtered = activeCategory === "All" ? classified : classified.filter(n => n.category === activeCategory);
+  const enriched = news.map(n => ({
+    ...n,
+    category: classifyNews(n.title),
+    sentiment: analyzeSentiment(n.title),
+  }));
+
+  const filtered = enriched.filter(n => {
+    if (activeCategory !== "All" && n.category !== activeCategory) return false;
+    if (sentimentFilter !== "all" && n.sentiment !== sentimentFilter) return false;
+    return true;
+  });
 
   const counts: Record<string, number> = { All: news.length };
-  for (const n of classified) counts[n.category] = (counts[n.category] ?? 0) + 1;
+  for (const n of enriched) counts[n.category] = (counts[n.category] ?? 0) + 1;
+
+  const sentimentCounts = { bullish: 0, bearish: 0, neutral: 0 };
+  for (const n of enriched) sentimentCounts[n.sentiment]++;
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -70,8 +117,37 @@ export default function NewsPage() {
           <Newspaper className="h-5 w-5 text-primary" />
           Market News
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Live NSE/BSE market news and updates</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Live NSE/BSE news with NLP sentiment analysis</p>
       </div>
+
+      {/* Sentiment Summary */}
+      {news.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {(["bullish", "bearish", "neutral"] as Sentiment[]).map(s => {
+            const cfg = SENTIMENT_CONFIG[s];
+            const Icon = cfg.icon;
+            const count = sentimentCounts[s];
+            const pct = news.length > 0 ? Math.round((count / news.length) * 100) : 0;
+            return (
+              <button
+                key={s}
+                onClick={() => setSentimentFilter(sentimentFilter === s ? "all" : s)}
+                className={`rounded-lg p-3 text-left transition-colors ${sentimentFilter === s ? cfg.bg : "border bg-card hover:bg-accent/30"}`}
+              >
+                <div className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${cfg.color}`}>
+                  <Icon className="h-3.5 w-3.5" />
+                  {cfg.label}
+                </div>
+                <div className="text-lg font-bold tabular-nums">{count}</div>
+                <div className="text-xs text-muted-foreground">{pct}% of articles</div>
+                <div className="mt-2 h-1 rounded-full bg-muted overflow-hidden">
+                  <div className={`h-full rounded-full ${s === "bullish" ? "bg-green-500" : s === "bearish" ? "bg-red-500" : "bg-gray-500"}`} style={{ width: `${pct}%` }} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Category tabs */}
       <div className="flex flex-wrap gap-1.5">
@@ -89,17 +165,34 @@ export default function NewsPage() {
             {counts[cat] ? <span className="ml-1 opacity-60">({counts[cat]})</span> : null}
           </button>
         ))}
+        {sentimentFilter !== "all" && (
+          <button
+            onClick={() => setSentimentFilter("all")}
+            className="rounded-full px-3 py-1 text-xs font-semibold bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors"
+          >
+            ✕ Clear filter
+          </button>
+        )}
       </div>
 
       {/* News list */}
       <div className="rounded-lg border bg-card divide-y overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">Loading news…</div>
+          <div className="space-y-0 divide-y">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="p-4">
+                <div className="h-4 w-24 rounded bg-accent/40 animate-pulse mb-2" />
+                <div className="h-4 w-full rounded bg-accent/40 animate-pulse mb-1" />
+                <div className="h-4 w-3/4 rounded bg-accent/30 animate-pulse" />
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground text-sm">No news in this category</div>
         ) : (
           filtered.map(item => {
-            const expanded = expandedId === item.uuid;
+            const sc = SENTIMENT_CONFIG[item.sentiment];
+            const SIcon = sc.icon;
             return (
               <div key={item.uuid} className="p-4 hover:bg-accent/20 transition-colors">
                 <div className="flex items-start gap-3">
@@ -108,18 +201,24 @@ export default function NewsPage() {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_COLOR[item.category as Category]}`}>
                         {item.category}
                       </span>
+                      <span className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${sc.bg} ${sc.color}`}>
+                        <SIcon className="h-2.5 w-2.5" />
+                        {sc.label}
+                      </span>
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <Clock className="h-2.5 w-2.5" />
                         {timeAgo(item.providerPublishTime)}
                       </span>
                       <span className="text-[10px] text-muted-foreground">· {item.publisher}</span>
                     </div>
-                    <button
-                      className="text-sm font-medium text-left hover:text-primary transition-colors leading-snug"
-                      onClick={() => setExpandedId(expanded ? null : item.uuid)}
+                    <a
+                      href={item.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-left hover:text-primary transition-colors leading-snug block"
                     >
                       {item.title}
-                    </button>
+                    </a>
                     {(item.relatedTickers ?? []).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {(item.relatedTickers ?? []).slice(0, 5).map(t => (
