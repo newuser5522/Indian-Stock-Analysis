@@ -48,16 +48,18 @@ export function stripSymbolSuffix(symbol: string): string {
   return symbol.replace(/\.(NS|BO)$/i, "");
 }
 
+/** Text color for gain/loss — matches Finance Hub palette */
 export function changeColor(value: number | undefined | null): string {
   if (value == null) return "text-muted-foreground";
-  if (value > 0) return "text-emerald-400";
-  if (value < 0) return "text-red-400";
+  if (value > 0) return "text-green-500";
+  if (value < 0) return "text-red-500";
   return "text-muted-foreground";
 }
 
+/** Badge background + text for gain/loss */
 export function changeBg(value: number | undefined | null): string {
   if (value == null) return "bg-muted/40 text-muted-foreground";
-  if (value > 0) return "bg-emerald-500/10 text-emerald-400";
-  if (value < 0) return "bg-red-500/10 text-red-400";
+  if (value > 0) return "bg-green-500/10 text-green-500";
+  if (value < 0) return "bg-red-500/10 text-red-500";
   return "bg-muted/40 text-muted-foreground";
 }

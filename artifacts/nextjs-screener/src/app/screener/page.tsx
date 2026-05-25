@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
   formatMarketCap,
   formatRatio,
   changeColor,
+  changeBg,
   displaySymbol,
 } from "@/lib/format";
 
@@ -91,114 +92,76 @@ export default function ScreenerPage() {
   });
 
   const set = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
+  const toggleSort = (col: string) => {
+    setFilters((f) => ({
+      ...f,
+      sortBy: col,
+      sortOrder: f.sortBy === col && f.sortOrder === "desc" ? "asc" : "desc",
+    }));
+  };
+
+  const labelClass = "text-xs font-medium text-muted-foreground mb-1 block";
+  const selectClass =
+    "h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring transition-colors";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Search className="h-5 w-5 text-primary" />
-        <h1 className="text-2xl font-bold">Stock Screener</h1>
+    <div className="space-y-5 max-w-screen-xl">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Search className="h-5 w-5 text-primary" />
+          Stock Screener
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Filter and sort 109+ NSE stocks</p>
       </div>
 
       {/* Filter panel */}
-      <div className="rounded-xl border bg-card p-4">
+      <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-4">
-          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+          <SlidersHorizontal className="h-4 w-4 text-primary" />
           <span className="font-semibold text-sm">Filters</span>
         </div>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-          {/* Exchange */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Exchange</label>
-            <select
-              value={filters.exchange}
-              onChange={(e) => set("exchange", e.target.value)}
-              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
+          <div>
+            <label className={labelClass}>Exchange</label>
+            <select value={filters.exchange} onChange={(e) => set("exchange", e.target.value)} className={selectClass}>
               <option value="">All</option>
               <option value="NSE">NSE</option>
               <option value="BSE">BSE</option>
             </select>
           </div>
-
-          {/* Sector */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Sector</label>
-            <select
-              value={filters.sector}
-              onChange={(e) => set("sector", e.target.value)}
-              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
+          <div>
+            <label className={labelClass}>Sector</label>
+            <select value={filters.sector} onChange={(e) => set("sector", e.target.value)} className={selectClass}>
               <option value="">All Sectors</option>
               {(sectors ?? []).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
-
-          {/* Min P/E */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Min P/E</label>
-            <Input
-              type="number"
-              placeholder="e.g. 5"
-              value={filters.minPe}
-              onChange={(e) => set("minPe", e.target.value)}
-            />
+          <div>
+            <label className={labelClass}>Min P/E</label>
+            <Input type="number" placeholder="e.g. 5" value={filters.minPe} onChange={(e) => set("minPe", e.target.value)} />
           </div>
-
-          {/* Max P/E */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Max P/E</label>
-            <Input
-              type="number"
-              placeholder="e.g. 30"
-              value={filters.maxPe}
-              onChange={(e) => set("maxPe", e.target.value)}
-            />
+          <div>
+            <label className={labelClass}>Max P/E</label>
+            <Input type="number" placeholder="e.g. 30" value={filters.maxPe} onChange={(e) => set("maxPe", e.target.value)} />
           </div>
-
-          {/* Min Market Cap */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Min MCap (₹Cr)</label>
-            <Input
-              type="number"
-              placeholder="e.g. 10000"
-              value={filters.minMarketCapCr}
-              onChange={(e) => set("minMarketCapCr", e.target.value)}
-            />
+          <div>
+            <label className={labelClass}>Min MCap (₹Cr)</label>
+            <Input type="number" placeholder="e.g. 10000" value={filters.minMarketCapCr} onChange={(e) => set("minMarketCapCr", e.target.value)} />
           </div>
-
-          {/* Sort by */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Sort By</label>
-            <select
-              value={filters.sortBy}
-              onChange={(e) => set("sortBy", e.target.value)}
-              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
+          <div>
+            <label className={labelClass}>Sort By</label>
+            <select value={filters.sortBy} onChange={(e) => set("sortBy", e.target.value)} className={selectClass}>
               {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
         </div>
-
-        <div className="mt-3 flex gap-2">
-          <Button onClick={() => setApplied(filters)} size="sm">
-            Apply Filters
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setFilters(DEFAULT_FILTERS);
-              setApplied(DEFAULT_FILTERS);
-            }}
-          >
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => setApplied(filters)}>Apply Filters</Button>
+          <Button variant="outline" size="sm" onClick={() => { setFilters(DEFAULT_FILTERS); setApplied(DEFAULT_FILTERS); }}>
             Reset
           </Button>
           <Button
@@ -206,30 +169,31 @@ export default function ScreenerPage() {
             size="sm"
             onClick={() => setFilters((f) => ({ ...f, sortOrder: f.sortOrder === "asc" ? "desc" : "asc" }))}
           >
-            {filters.sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            {filters.sortOrder === "asc" ? "Ascending" : "Descending"}
           </Button>
         </div>
       </div>
 
-      {/* Results table */}
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <span className="text-sm text-muted-foreground">
-            {isLoading ? "Loading..." : `${(results ?? []).length} stocks`}
+      {/* Results */}
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+          <span className="text-sm font-medium">
+            {isLoading ? "Loading..." : `${(results ?? []).length} stocks found`}
           </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-xs text-muted-foreground uppercase tracking-wide">
-                <th className="text-left px-4 py-3">Stock</th>
-                <th className="text-left px-4 py-3">Sector</th>
-                <th className="text-right px-4 py-3">Price</th>
-                <th className="text-right px-4 py-3">Chg%</th>
-                <th className="text-right px-4 py-3">Volume</th>
-                <th className="text-right px-4 py-3">MCap</th>
-                <th className="text-right px-4 py-3">P/E</th>
-                <th className="text-right px-4 py-3">P/B</th>
+              <tr className="border-b bg-muted/30">
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stock</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sector</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Price</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Chg%</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Volume</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">MCap</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">P/E</th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">P/B</th>
               </tr>
             </thead>
             <tbody>
@@ -238,46 +202,45 @@ export default function ScreenerPage() {
                     <tr key={i} className="border-b">
                       {[...Array(8)].map((__, j) => (
                         <td key={j} className="px-4 py-3">
-                          <div className="h-4 rounded bg-secondary/40 animate-pulse" />
+                          <div className="h-4 rounded bg-accent/40 animate-pulse" />
                         </td>
                       ))}
                     </tr>
                   ))
-                : (results ?? []).map((s) => (
-                    <tr key={s.symbol} className="border-b hover:bg-secondary/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <Link href={`/stock/${encodeURIComponent(s.symbol)}`} className="hover:text-primary">
-                          <div className="font-medium">{displaySymbol(s.symbol)}</div>
-                          <div className="text-xs text-muted-foreground">{s.name}</div>
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{s.sector}</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-medium">
-                        {formatPrice(s.regularMarketPrice)}
-                      </td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-medium ${changeColor(s.regularMarketChangePercent)}`}>
-                        {formatChangePercent(s.regularMarketChangePercent)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                        {formatVolume(s.regularMarketVolume)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                        {s.marketCap ? formatMarketCap((s.marketCap ?? 0) / 1e7) : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                        {formatRatio(s.trailingPE)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                        {formatRatio(s.priceToBook)}
-                      </td>
-                    </tr>
-                  ))}
+                : (results ?? []).map((s) => {
+                    const chg = s.regularMarketChangePercent;
+                    return (
+                      <tr key={s.symbol} className="border-b hover:bg-accent/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <Link href={`/stock/${encodeURIComponent(s.symbol)}`} className="group">
+                            <div className="font-semibold group-hover:text-primary transition-colors">{displaySymbol(s.symbol)}</div>
+                            <div className="text-xs text-muted-foreground truncate max-w-[160px]">{s.name}</div>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block rounded-md bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground">
+                            {s.sector}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums font-semibold">{formatPrice(s.regularMarketPrice)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${changeBg(chg)}`}>
+                            {formatChangePercent(chg)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs">{formatVolume(s.regularMarketVolume)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs">
+                          {s.marketCap ? formatMarketCap((s.marketCap ?? 0) / 1e7) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs">{formatRatio(s.trailingPE)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground text-xs">{formatRatio(s.priceToBook)}</td>
+                      </tr>
+                    );
+                  })}
             </tbody>
           </table>
           {!isLoading && (results ?? []).length === 0 && (
-            <div className="py-12 text-center text-muted-foreground text-sm">
-              No stocks match the current filters.
-            </div>
+            <div className="py-16 text-center text-muted-foreground text-sm">No stocks match the current filters.</div>
           )}
         </div>
       </div>

@@ -1,20 +1,33 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { Navbar } from "@/components/navbar";
+import { Sidebar } from "@/components/sidebar";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--app-font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "Indian Stock Screener",
-  description: "NSE/BSE stock screener with fundamentals and charts",
+  title: "FinTrack — Indian Stock Analytics",
+  description: "NSE/BSE stock screener with live data, fundamentals, and charts",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <Providers>
-          <Navbar />
-          <main className="mx-auto max-w-screen-xl px-4 py-6 lg:px-6">{children}</main>
+          <div className="flex h-screen overflow-hidden">
+            <Sidebar />
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <main className="flex-1 overflow-y-auto px-6 py-6">
+                {children}
+              </main>
+            </div>
+          </div>
         </Providers>
       </body>
     </html>

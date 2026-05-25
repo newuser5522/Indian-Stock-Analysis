@@ -16,11 +16,6 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/market/overview/route.js"
     ],
-    "/api/market/top-losers/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/top-losers/route.js"
-    ],
     "/api/market/top-gainers/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -30,6 +25,26 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/market/most-active/route.js"
+    ],
+    "/api/market/top-losers/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/market/top-losers/route.js"
+    ],
+    "/screener/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/screener/page.js"
+    ],
+    "/api/screener/sectors/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/screener/sectors/route.js"
+    ],
+    "/api/screener/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/screener/route.js"
     ]
   }
 }
