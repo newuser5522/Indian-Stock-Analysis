@@ -1,10 +1,7 @@
 {
-  "/api/market/top-gainers/route": "app/api/market/top-gainers/route.js",
-  "/api/market/top-losers/route": "app/api/market/top-losers/route.js",
   "/api/market/overview/route": "app/api/market/overview/route.js",
+  "/api/market/top-losers/route": "app/api/market/top-losers/route.js",
+  "/api/market/top-gainers/route": "app/api/market/top-gainers/route.js",
   "/api/market/most-active/route": "app/api/market/most-active/route.js",
-  "/api/screener/sectors/route": "app/api/screener/sectors/route.js",
-  "/api/screener/route": "app/api/screener/route.js",
-  "/page": "app/page.js",
-  "/screener/page": "app/screener/page.js"
+  "/page": "app/page.js"
 }
