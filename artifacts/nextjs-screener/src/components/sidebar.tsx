@@ -4,33 +4,57 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  BarChart3,
-  TrendingUp,
-  Search,
-  Star,
-  Menu,
-  X,
-  ChevronRight,
-  Briefcase,
-  Globe2,
-  Newspaper,
-  Zap,
-  CalendarDays,
-  Bell,
+  BarChart3, TrendingUp, Search, Star, Menu, X, ChevronRight,
+  Briefcase, Globe2, Newspaper, Zap, CalendarDays, Bell,
+  DollarSign, Activity, Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const NAV = [
-  { href: "/", label: "Market", icon: TrendingUp },
-  { href: "/sectors", label: "Sectors", icon: Globe2 },
-  { href: "/screener", label: "Screener", icon: Search },
-  { href: "/scans", label: "Scans", icon: Zap },
-  { href: "/watchlist", label: "Watchlist", icon: Star },
-  { href: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/news", label: "News", icon: Newspaper },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
+// Use a simple coin icon since GoldIcon doesn't exist
+const CoinsIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8" cy="8" r="6"/>
+    <path d="M18.09 10.37A6 6 0 1 1 10.34 18"/>
+    <path d="M7 6h1v4"/>
+    <path d="m16.71 13.88.7.71-2.82 2.82"/>
+  </svg>
+);
+
+const NAV_GROUPS = [
+  {
+    label: "Markets",
+    items: [
+      { href: "/", label: "Market", icon: TrendingUp },
+      { href: "/sectors", label: "Sectors", icon: Globe2 },
+      { href: "/fii-dii", label: "FII / DII", icon: Activity },
+      { href: "/forex", label: "Forex / USD-INR", icon: DollarSign },
+      { href: "/gold-etf", label: "Gold ETFs", icon: CoinsIcon },
+    ],
+  },
+  {
+    label: "Screener",
+    items: [
+      { href: "/screener", label: "Screener", icon: Search },
+      { href: "/query", label: "Query Screener", icon: Code2 },
+      { href: "/scans", label: "Scans", icon: Zap },
+    ],
+  },
+  {
+    label: "Portfolio",
+    items: [
+      { href: "/watchlist", label: "Watchlist", icon: Star },
+      { href: "/portfolio", label: "Portfolio", icon: Briefcase },
+      { href: "/alerts", label: "Alerts", icon: Bell },
+    ],
+  },
+  {
+    label: "Research",
+    items: [
+      { href: "/news", label: "News", icon: Newspaper },
+      { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    ],
+  },
 ];
 
 function NavItem({
@@ -98,35 +122,31 @@ export function Sidebar() {
             <BarChart3 className="h-4 w-4 text-sidebar-primary" />
           </div>
           <div>
-            <div className="text-sm font-bold tracking-tight text-sidebar-foreground">
-              FinTrack
-            </div>
-            <div className="text-[10px] text-muted-foreground leading-none">
-              Indian Stock Analytics
-            </div>
+            <div className="text-sm font-bold tracking-tight text-sidebar-foreground">FinTrack</div>
+            <div className="text-[10px] text-muted-foreground leading-none">Indian Stock Analytics</div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          <div className="px-2 pb-1 pt-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-              Navigation
-            </p>
-          </div>
-          {NAV.map(({ href, label, icon }) => (
-            <NavItem
-              key={href}
-              href={href}
-              label={label}
-              icon={icon}
-              active={
-                href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(href)
-              }
-              onClick={() => setOpen(false)}
-            />
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-3">
+          {NAV_GROUPS.map(group => (
+            <div key={group.label}>
+              <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map(({ href, label, icon }) => (
+                  <NavItem
+                    key={href}
+                    href={href}
+                    label={label}
+                    icon={icon}
+                    active={href === "/" ? pathname === "/" : (pathname ?? "").startsWith(href)}
+                    onClick={() => setOpen(false)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 

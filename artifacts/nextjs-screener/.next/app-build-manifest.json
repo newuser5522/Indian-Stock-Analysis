@@ -6,15 +6,45 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/page": [
+    "/fii-dii/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/fii-dii/page.js"
     ],
-    "/api/market/global/route": [
+    "/api/market/fii-dii/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/market/global/route.js"
+      "static/chunks/app/api/market/fii-dii/route.js"
+    ],
+    "/forex/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/forex/page.js"
+    ],
+    "/api/market/forex/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/market/forex/route.js"
+    ],
+    "/query/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/query/page.js"
+    ],
+    "/api/screener/advanced/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/screener/advanced/route.js"
+    ],
+    "/gold-etf/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/gold-etf/page.js"
+    ],
+    "/api/market/gold-etf/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/market/gold-etf/route.js"
     ]
   }
 }

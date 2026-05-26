@@ -145,10 +145,11 @@ function RSIChart({ data }: { data: { date: string; rsi: number | null }[] }) {
         <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: "hsl(215,20%,55%)" }} tickLine={false} axisLine={false}
           ticks={[0, 30, 40, 50, 60, 70, 100]} width={26} />
         <Tooltip contentStyle={TOOLTIP_STYLE}
-          formatter={(v: number | null, name: string) => {
-            if (v == null) return [null, null];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(v: any, name: string) => {
+            if (v == null) return ["—", name];
             const label = name === "rsiRed" ? "RSI (OB)" : name === "rsiGreen" ? "RSI (OS)" : "RSI";
-            return [v.toFixed(1), label];
+            return [(v as number).toFixed(1), label];
           }} />
         {/* Base yellow line (neutral) */}
         <Line type="monotone" dataKey="rsiYellow" stroke="#f59e0b" strokeWidth={1.5} dot={false} connectNulls name="RSI" />
@@ -163,8 +164,8 @@ function RSIChart({ data }: { data: { date: string; rsi: number | null }[] }) {
 
 /* ─── Main page ─────────────────────────────────────────────────────────── */
 export default function StockPage() {
-  const params = useParams<{ symbol: string }>();
-  const rawSymbol = decodeURIComponent(params.symbol ?? "");
+  const params = useParams();
+  const rawSymbol = decodeURIComponent((params?.symbol as string | undefined) ?? "");
   const [period, setPeriod] = useState(PERIODS[1]);
   const [activeTab, setActiveTab] = useState<StockTab>("Price Chart");
   const queryClient = useQueryClient();

@@ -1,4 +1,10 @@
 {
-  "/api/market/global/route": "app/api/market/global/route.js",
-  "/page": "app/page.js"
+  "/api/market/fii-dii/route": "app/api/market/fii-dii/route.js",
+  "/api/market/forex/route": "app/api/market/forex/route.js",
+  "/api/screener/advanced/route": "app/api/screener/advanced/route.js",
+  "/api/market/gold-etf/route": "app/api/market/gold-etf/route.js",
+  "/fii-dii/page": "app/fii-dii/page.js",
+  "/forex/page": "app/forex/page.js",
+  "/query/page": "app/query/page.js",
+  "/gold-etf/page": "app/gold-etf/page.js"
 }
