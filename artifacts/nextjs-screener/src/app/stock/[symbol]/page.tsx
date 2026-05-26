@@ -8,13 +8,14 @@ import {
   ComposedChart, LineChart, Line, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea, Legend,
 } from "recharts";
-import { ArrowLeft, Star, StarOff, TrendingUp, TrendingDown, ExternalLink, Clock } from "lucide-react";
+import { ArrowLeft, Star, StarOff, TrendingUp, TrendingDown, ExternalLink, Clock, FileText, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiUrl } from "@/lib/api-url";
 import {
   formatPrice, formatChangePercent, formatMarketCap, formatPercent,
   formatRatio, formatVolume, changeColor, changeBg, displaySymbol,
 } from "@/lib/format";
+import { isFno } from "@/lib/fno-stocks";
 import { toast } from "sonner";
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
@@ -41,6 +42,7 @@ interface HistoryRow {
 }
 interface NewsItem { uuid: string; title: string; publisher: string; link: string; providerPublishTime: number; relatedTickers?: string[] }
 interface WatchlistItem { symbol: string }
+interface Filing { title: string; date: string; type: string; category: string; url?: string }
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
 const PERIODS = [
@@ -51,7 +53,7 @@ const PERIODS = [
   { label: "1Y", value: "1y", interval: "1d" },
   { label: "5Y", value: "5y", interval: "1wk" },
 ];
-const TABS = ["Price Chart", "Volume & Delivery", "Price History"] as const;
+const TABS = ["Price Chart", "Volume & Delivery", "Price History", "Filings"] as const;
 type StockTab = (typeof TABS)[number];
 
 /* ─── RSI computation ───────────────────────────────────────────────────── */
@@ -196,6 +198,12 @@ export default function StockPage() {
     enabled: !!rawSymbol,
     staleTime: 5 * 60 * 1000,
   });
+  const { data: filings = [], isLoading: filingsLoading } = useQuery<Filing[]>({
+    queryKey: ["stock", "filings", rawSymbol],
+    queryFn: () => fetch(apiUrl(`/stocks/filings/${encodeURIComponent(rawSymbol)}`)).then(r => r.json()),
+    enabled: !!rawSymbol && activeTab === "Filings",
+    staleTime: 5 * 60 * 1000,
+  });
   const { data: watchlist } = useQuery<WatchlistItem[]>({
     queryKey: ["watchlist"],
     queryFn: () => fetch(apiUrl("/watchlist")).then(r => r.json()),
@@ -246,6 +254,11 @@ export default function StockPage() {
             {quote?.shortName && <span className="text-base font-normal text-muted-foreground">{quote.shortName}</span>}
             {fundamentals?.sector && (
               <span className="rounded-full bg-primary/10 text-primary text-xs font-semibold px-2.5 py-0.5">{fundamentals.sector}</span>
+            )}
+            {isFno(rawSymbol) && (
+              <span className="rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 text-xs font-bold px-2.5 py-0.5 tracking-wide">
+                F&amp;O
+              </span>
             )}
           </div>
           {fundamentals?.industry && <p className="text-xs text-muted-foreground mt-1">{fundamentals.industry}</p>}
@@ -486,6 +499,96 @@ export default function StockPage() {
               <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">{fundamentals.longBusinessSummary}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Filings tab */}
+      {activeTab === "Filings" && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            <h2 className="font-semibold">Corporate Filings — {displaySymbol(rawSymbol)}</h2>
+            <span className="text-xs text-muted-foreground">(NSE India)</span>
+          </div>
+          <div className="rounded-lg border bg-card overflow-hidden">
+            {filingsLoading ? (
+              <div className="space-y-0 divide-y">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="p-4 flex gap-4">
+                    <div className="h-4 w-20 bg-accent/40 animate-pulse rounded" />
+                    <div className="flex-1 h-4 bg-accent/40 animate-pulse rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : filings.length === 0 ? (
+              <div className="py-16 text-center">
+                <AlertTriangle className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+                <p className="text-muted-foreground font-medium">No filings available</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">NSE India API may be unavailable or the symbol is not listed on NSE</p>
+                <a
+                  href={`https://www.nseindia.com/get-quotes/equity?symbol=${rawSymbol.replace(".NS","")}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-3 text-xs text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View on NSE India
+                </a>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filings.map((f, i) => {
+                  const catColor: Record<string, string> = {
+                    "Corporate Action": "bg-blue-500/15 text-blue-400",
+                    "Board Meeting": "bg-purple-500/15 text-purple-400",
+                    "Announcement": "bg-amber-500/15 text-amber-400",
+                  };
+                  return (
+                    <div key={i} className="flex items-start gap-4 px-4 py-3 hover:bg-accent/20 transition-colors">
+                      <div className="shrink-0 text-center w-16">
+                        {f.date ? (
+                          <>
+                            <div className="text-xs font-bold tabular-nums">
+                              {new Date(f.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {new Date(f.date).getFullYear()}
+                            </div>
+                          </>
+                        ) : <div className="text-xs text-muted-foreground">—</div>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${catColor[f.category] ?? "bg-secondary/60 text-muted-foreground"}`}>
+                            {f.category}
+                          </span>
+                          {f.type && f.type !== "Filing" && (
+                            <span className="text-[10px] text-muted-foreground bg-secondary/40 rounded px-1.5 py-0.5">{f.type}</span>
+                          )}
+                        </div>
+                        <p className="text-sm font-medium leading-snug">{f.title}</p>
+                      </div>
+                      {f.url && (
+                        <a href={f.url} target="_blank" rel="noopener noreferrer"
+                          className="shrink-0 p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-primary transition-colors">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <a
+              href={`https://www.nseindia.com/get-quotes/equity?symbol=${rawSymbol.replace(".NS","")}`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              <ExternalLink className="h-3 w-3" />
+              View all filings on NSE India
+            </a>
+          </div>
         </div>
       )}
 

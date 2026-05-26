@@ -17,6 +17,7 @@ import {
   changeBg,
   displaySymbol,
 } from "@/lib/format";
+import { isFno } from "@/lib/fno-stocks";
 
 interface ScreenerStock {
   symbol: string;
@@ -43,6 +44,7 @@ interface Filters {
   minMarketCapCr: string;
   sortBy: string;
   sortOrder: string;
+  fnoOnly: boolean;
 }
 
 const DEFAULT_FILTERS: Filters = {
@@ -55,6 +57,7 @@ const DEFAULT_FILTERS: Filters = {
   minMarketCapCr: "",
   sortBy: "marketCap",
   sortOrder: "desc",
+  fnoOnly: false,
 };
 
 const SORT_OPTIONS = [
@@ -85,11 +88,15 @@ export default function ScreenerPage() {
   params.set("sortBy", applied.sortBy);
   params.set("sortOrder", applied.sortOrder);
 
-  const { data: results, isLoading } = useQuery<ScreenerStock[]>({
+  const { data: rawResults, isLoading } = useQuery<ScreenerStock[]>({
     queryKey: ["screener", "results", applied],
     queryFn: () => fetch(apiUrl(`/screener?${params}`)).then((r) => r.json()),
     staleTime: 60_000,
   });
+
+  const results = applied.fnoOnly
+    ? (rawResults ?? []).filter((s) => isFno(s.symbol))
+    : rawResults;
 
   const set = (k: keyof Filters, v: string) => setFilters((f) => ({ ...f, [k]: v }));
   const toggleSort = (col: string) => {
@@ -159,7 +166,7 @@ export default function ScreenerPage() {
             </select>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2 items-center">
           <Button size="sm" onClick={() => setApplied(filters)}>Apply Filters</Button>
           <Button variant="outline" size="sm" onClick={() => { setFilters(DEFAULT_FILTERS); setApplied(DEFAULT_FILTERS); }}>
             Reset
@@ -172,6 +179,15 @@ export default function ScreenerPage() {
             <ArrowUpDown className="h-3.5 w-3.5" />
             {filters.sortOrder === "asc" ? "Ascending" : "Descending"}
           </Button>
+          <label className="flex items-center gap-2 ml-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.fnoOnly}
+              onChange={(e) => setFilters((f) => ({ ...f, fnoOnly: e.target.checked }))}
+              className="h-3.5 w-3.5 accent-cyan-400"
+            />
+            <span className="text-xs font-semibold text-cyan-400">F&amp;O Only</span>
+          </label>
         </div>
       </div>
 
@@ -213,7 +229,12 @@ export default function ScreenerPage() {
                       <tr key={s.symbol} className="border-b hover:bg-accent/30 transition-colors">
                         <td className="px-4 py-3">
                           <Link href={`/stock/${encodeURIComponent(s.symbol)}`} className="group">
-                            <div className="font-semibold group-hover:text-primary transition-colors">{displaySymbol(s.symbol)}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold group-hover:text-primary transition-colors">{displaySymbol(s.symbol)}</span>
+                              {isFno(s.symbol) && (
+                                <span className="text-[9px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded px-1 py-0.5 leading-none">F&amp;O</span>
+                              )}
+                            </div>
                             <div className="text-xs text-muted-foreground truncate max-w-[160px]">{s.name}</div>
                           </Link>
                         </td>
