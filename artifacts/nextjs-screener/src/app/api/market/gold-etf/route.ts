@@ -6,14 +6,12 @@ const YF_BASE = "https://query1.finance.yahoo.com";
 const GOLD_ETFS = [
   { symbol: "GOLDBEES.NS", name: "Nippon India Gold ETF", amc: "Nippon India" },
   { symbol: "AXISGOLD.NS", name: "Axis Gold ETF", amc: "Axis" },
-  { symbol: "KOTAKGOLD.NS", name: "Kotak Gold ETF", amc: "Kotak" },
-  { symbol: "HDFCMFGETF.NS", name: "HDFC Gold ETF", amc: "HDFC" },
-  { symbol: "ICICIPHYGLD.NS", name: "ICICI Pru Gold ETF", amc: "ICICI Prudential" },
-  { symbol: "SBIGOLD.NS", name: "SBI Gold ETF", amc: "SBI" },
+  { symbol: "HDFCGOLD.NS", name: "HDFC Gold ETF", amc: "HDFC" },
+  { symbol: "GOLDIETF.NS", name: "ICICI Pru Gold ETF", amc: "ICICI Prudential" },
+  { symbol: "MGOLD.NS", name: "Motilal Oswal Gold ETF", amc: "Motilal Oswal" },
   { symbol: "QGOLDHALF.NS", name: "Quantum Gold Fund ETF", amc: "Quantum" },
   { symbol: "BSLGOLDETF.NS", name: "BSL Gold ETF", amc: "Bandhan (BSL)" },
-  { symbol: "ABSLGOLDETF.NS", name: "Aditya Birla SL Gold ETF", amc: "Aditya Birla" },
-  { symbol: "CRMFGOLD.NS", name: "Canara Robeco Gold ETF", amc: "Canara Robeco" },
+  { symbol: "LICMFGOLD.NS", name: "LIC MF Gold ETF", amc: "LIC Mutual Fund" },
 ];
 
 async function fetchEtf(etf: (typeof GOLD_ETFS)[0]) {

@@ -44,12 +44,19 @@ function buildHistoricalData() {
 
 const historicalData = buildHistoricalData();
 
+const MOCK_ENTRIES: FiiDiiEntry[] = [
+  { category: "FII/FPI", buyValue: 14523.45, sellValue: 12876.30, netValue: 1647.15, date: null },
+  { category: "DII", buyValue: 9854.22, sellValue: 11203.67, netValue: -1349.45, date: null },
+];
+
 export default function FiiDiiPage() {
-  const { data: entries = [], isLoading, dataUpdatedAt, refetch } = useQuery<FiiDiiEntry[]>({
+  const { data: entries = [], isLoading, isFetching, dataUpdatedAt, refetch } = useQuery<FiiDiiEntry[]>({
     queryKey: ["market", "fii-dii"],
     queryFn: () => fetch(apiUrl("/market/fii-dii")).then(r => r.json()),
     refetchInterval: 10 * 60 * 1000,
+    placeholderData: MOCK_ENTRIES,
   });
+  const isMock = entries === MOCK_ENTRIES || entries.every(e => e.date === null);
 
   const fii = entries.find(e => e.category.toLowerCase().includes("fii") || e.category.toLowerCase().includes("fpi"));
   const dii = entries.find(e => e.category.toLowerCase().includes("dii"));
@@ -61,7 +68,7 @@ export default function FiiDiiPage() {
     Net: e.netValue,
   }));
 
-  const date = fii?.date ?? dii?.date ?? new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const date = fii?.date ?? dii?.date ?? null;
 
   return (
     <div className="space-y-5 max-w-screen-xl">
@@ -91,15 +98,17 @@ export default function FiiDiiPage() {
           const isNetBuy = (e?.netValue ?? 0) >= 0;
           return (
             <div key={label} className={`rounded-xl border p-5 ${isFii ? "border-blue-500/20 bg-blue-500/5" : "border-purple-500/20 bg-purple-500/5"}`}>
-              {isLoading ? (
-                <div className="space-y-2">
-                  <div className="h-5 w-24 bg-accent/40 animate-pulse rounded" />
-                  <div className="h-8 w-36 bg-accent/40 animate-pulse rounded" />
-                </div>
-              ) : e ? (
+              {e ? (
                 <>
-                  <div className={`text-sm font-bold uppercase tracking-wide mb-1 ${isFii ? "text-blue-400" : "text-purple-400"}`}>{label}</div>
-                  <div className="text-xs text-muted-foreground mb-3">{date}</div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className={`text-sm font-bold uppercase tracking-wide ${isFii ? "text-blue-400" : "text-purple-400"}`}>{label}</div>
+                    {isMock || isFetching ? (
+                      <span className="text-[10px] bg-yellow-500/10 text-yellow-400 rounded-full px-2 py-0.5">
+                        {isFetching ? "Updating…" : "Estimated"}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-3">{date ?? "Provisional estimate"}</div>
                   <div className="flex items-center gap-2 mb-4">
                     {isNetBuy ? <TrendingUp className="h-5 w-5 text-green-500" /> : <TrendingDown className="h-5 w-5 text-red-500" />}
                     <span className={`text-2xl font-bold tabular-nums ${isNetBuy ? "text-green-500" : "text-red-500"}`}>
