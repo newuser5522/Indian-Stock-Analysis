@@ -55,7 +55,9 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 
 - **Next.js basePath `/nextjs`**: avoids conflict with the legacy Express API at `/api`. Client fetches use `apiUrl('/...')` which prepends `NEXT_PUBLIC_BASE_PATH`.
 - **Server-side caching**: In-memory TTL cache (`src/lib/cache.ts`) per Next.js process. Market data: 60s TTL, fundamentals: 5min TTL, screener quotes: 2min TTL.
-- **Yahoo Finance**: Uses chart API v8 (no auth required) for quotes/history. Uses quoteSummary v10 with crumb for fundamentals.
+- **Yahoo Finance**: Uses chart API v8 (no auth required) for quotes/history. Uses quoteSummary v10 with crumb for fundamentals, falling back to a crumbless `v7/finance/quote` call (`fetchQuoteFallback` in `yahoo-finance.ts`) if the crumb/session fails.
+- **Screener search**: `api/screener/route.ts` uses `searchYahoo` for a live, symbol-search-based stock listing rather than filtering only the static `NSE_STOCKS` list; the screener page has a search box wired to this.
+- **Fundamentals fallback chain**: `api/stocks/fundamentals/[symbol]/route.ts` merges `fetchSummary` (quoteSummary), `fetchQuotes`, and `fetchNseData` (NSE India quote-equity API) results, since any one source can be missing fields or blocked.
 - **RSI(14)**: Computed client-side from OHLCV history data in the stock detail page.
 - **DB imports in API routes**: `@workspace/db` is a workspace package imported directly into Next.js API routes — no need for a separate Express layer.
 

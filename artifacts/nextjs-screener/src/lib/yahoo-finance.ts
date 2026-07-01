@@ -2,7 +2,8 @@ const YF_BASE = "https://query1.finance.yahoo.com";
 const YF_BASE2 = "https://query2.finance.yahoo.com";
 
 const HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   Accept: "application/json, text/plain, */*",
   "Accept-Language": "en-US,en;q=0.9",
   "Accept-Encoding": "gzip, deflate, br",
@@ -12,7 +13,8 @@ const HEADERS = {
 
 const NSE_BASE = "https://www.nseindia.com/api";
 const NSE_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   Accept: "*/*",
   "Accept-Language": "en-US,en;q=0.9",
   Referer: "https://www.nseindia.com/",
@@ -34,8 +36,14 @@ export async function fetchNseData(symbol: string): Promise<NseData> {
   const nseSymbol = symbol.replace(/\.(NS|BO)$/i, "").toUpperCase();
   try {
     const [quoteRes, tradeRes] = await Promise.all([
-      fetch(`${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}`, { headers: NSE_HEADERS }),
-      fetch(`${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}&section=trade_info`, { headers: NSE_HEADERS }),
+      fetch(
+        `${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}`,
+        { headers: NSE_HEADERS },
+      ),
+      fetch(
+        `${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}&section=trade_info`,
+        { headers: NSE_HEADERS },
+      ),
     ]);
 
     const result: NseData = {};
@@ -44,26 +52,40 @@ export async function fetchNseData(symbol: string): Promise<NseData> {
       const quoteData = (await quoteRes.json()) as {
         metadata?: { pdSymbolPe?: number };
         priceInfo?: { vwap?: number };
-        industryInfo?: { macro?: string; sector?: string; industry?: string; basicIndustry?: string };
+        industryInfo?: {
+          macro?: string;
+          sector?: string;
+          industry?: string;
+          basicIndustry?: string;
+        };
         securityInfo?: { faceValue?: number; issuedSize?: number };
       };
       result.pe = quoteData.metadata?.pdSymbolPe ?? undefined;
       result.vwap = quoteData.priceInfo?.vwap ?? undefined;
       result.faceValue = quoteData.securityInfo?.faceValue ?? undefined;
-      result.sharesOutstanding = quoteData.securityInfo?.issuedSize ?? undefined;
+      result.sharesOutstanding =
+        quoteData.securityInfo?.issuedSize ?? undefined;
       result.sector = quoteData.industryInfo?.macro ?? undefined;
-      result.industry = quoteData.industryInfo?.industry ?? quoteData.industryInfo?.basicIndustry ?? undefined;
+      result.industry =
+        quoteData.industryInfo?.industry ??
+        quoteData.industryInfo?.basicIndustry ??
+        undefined;
     }
 
     if (tradeRes.ok) {
       const tradeData = (await tradeRes.json()) as {
-        marketDeptOrderBook?: { tradeInfo?: { totalMarketCap?: number; cmAnnualVolatility?: string } };
+        marketDeptOrderBook?: {
+          tradeInfo?: { totalMarketCap?: number; cmAnnualVolatility?: string };
+        };
         securityWiseDP?: { deliveryToTradedQuantity?: number };
       };
-      result.marketCapCrores = tradeData.marketDeptOrderBook?.tradeInfo?.totalMarketCap ?? undefined;
-      const volStr = tradeData.marketDeptOrderBook?.tradeInfo?.cmAnnualVolatility;
+      result.marketCapCrores =
+        tradeData.marketDeptOrderBook?.tradeInfo?.totalMarketCap ?? undefined;
+      const volStr =
+        tradeData.marketDeptOrderBook?.tradeInfo?.cmAnnualVolatility;
       result.annualVolatility = volStr ? parseFloat(volStr) : undefined;
-      result.deliveryPct = tradeData.securityWiseDP?.deliveryToTradedQuantity ?? undefined;
+      result.deliveryPct =
+        tradeData.securityWiseDP?.deliveryToTradedQuantity ?? undefined;
     }
 
     return result;
@@ -74,7 +96,8 @@ export async function fetchNseData(symbol: string): Promise<NseData> {
 
 async function yfFetch(url: string): Promise<unknown> {
   const res = await fetch(url, { headers: HEADERS });
-  if (!res.ok) throw new Error(`Yahoo Finance fetch failed: ${res.status} ${url}`);
+  if (!res.ok)
+    throw new Error(`Yahoo Finance fetch failed: ${res.status} ${url}`);
   return res.json();
 }
 
@@ -101,6 +124,8 @@ export interface YFQuote {
   priceToBook?: number;
   trailingEps?: number;
   dividendYield?: number;
+  dividendRate?: number;
+  beta?: number;
   returnOnEquity?: number;
 }
 
@@ -126,7 +151,9 @@ async function fetchChartMeta(symbol: string): Promise<YFQuote | null> {
         result?: {
           meta?: ChartMeta;
           timestamp?: number[];
-          indicators?: { quote?: { open?: (number | null)[]; close?: (number | null)[] }[] };
+          indicators?: {
+            quote?: { open?: (number | null)[]; close?: (number | null)[] }[];
+          };
         }[];
       };
     };
@@ -142,7 +169,8 @@ async function fetchChartMeta(symbol: string): Promise<YFQuote | null> {
     const quotes = result?.indicators?.quote?.[0];
     const timestamps = result?.timestamp ?? [];
     const prevDayIdx = timestamps.length >= 2 ? timestamps.length - 2 : -1;
-    const open = prevDayIdx >= 0 ? (quotes?.open?.[prevDayIdx] ?? price) : price;
+    const open =
+      prevDayIdx >= 0 ? (quotes?.open?.[prevDayIdx] ?? price) : price;
 
     return {
       symbol,
@@ -254,21 +282,46 @@ export interface YFSummary {
 let _crumb: string | null = null;
 let _cookies: string | null = null;
 
-async function getYFCrumb(): Promise<{ crumb: string; cookie: string } | null> {
+function buildYFCookieHeader(setCookieHeader: string | null): string {
+  if (!setCookieHeader) return "";
+  return setCookieHeader
+    .split(/,(?=[^;]+=)/)
+    .map((cookie) => cookie.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+async function getYFCrumb(
+  symbol?: string,
+): Promise<{ crumb: string; cookie: string } | null> {
   if (_crumb && _cookies) return { crumb: _crumb, cookie: _cookies };
+
   try {
-    const consentRes = await fetch("https://finance.yahoo.com/", {
-      headers: { ...HEADERS, Cookie: "GUCS=AZBxCDE0; B=abc123; YahooFinanceFirstCrumb=none" },
+    const pageUrl = symbol
+      ? `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`
+      : "https://finance.yahoo.com/";
+    const pageRes = await fetch(pageUrl, {
+      headers: {
+        ...HEADERS,
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      },
       redirect: "follow",
     });
-    const setCookieHeader = consentRes.headers.get("set-cookie") ?? "";
-    const cookieStr = setCookieHeader.split(",").map((c) => c.split(";")[0].trim()).join("; ");
-    const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
-      headers: { ...HEADERS, Cookie: cookieStr },
-    });
+    const setCookieHeader = pageRes.headers.get("set-cookie") ?? "";
+    const cookieStr = buildYFCookieHeader(setCookieHeader);
+    if (!cookieStr) return null;
+
+    const crumbRes = await fetch(
+      "https://query2.finance.yahoo.com/v1/test/getcrumb",
+      {
+        headers: { ...HEADERS, Cookie: cookieStr },
+      },
+    );
     if (!crumbRes.ok) return null;
     const crumb = (await crumbRes.text()).trim();
     if (!crumb || crumb.startsWith("{")) return null;
+
     _crumb = crumb;
     _cookies = cookieStr;
     return { crumb, cookie: cookieStr };
@@ -278,16 +331,102 @@ async function getYFCrumb(): Promise<{ crumb: string; cookie: string } | null> {
 }
 
 export async function fetchSummary(symbol: string): Promise<YFSummary> {
-  const modules = ["defaultKeyStatistics", "financialData", "summaryDetail", "assetProfile", "price"].join(",");
-  try {
-    const auth = await getYFCrumb();
-    const crumb = auth?.crumb ?? "";
+  const modules = [
+    "defaultKeyStatistics",
+    "financialData",
+    "summaryDetail",
+    "assetProfile",
+    "price",
+  ].join(",");
+
+  async function fetchQuoteFallback(): Promise<YFSummary> {
+    const auth = await getYFCrumb(symbol);
+    const crumb = auth?.crumb;
     const cookie = auth?.cookie ?? "";
-    const url = `${YF_BASE}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`;
-    const res = await fetch(url, { headers: { ...HEADERS, ...(cookie ? { Cookie: cookie } : {}) } });
-    if (!res.ok) throw new Error(`quoteSummary failed: ${res.status}`);
-    const data = (await res.json()) as { quoteSummary?: { result?: YFSummary[] } };
-    return data?.quoteSummary?.result?.[0] ?? {};
+    const url = `${YF_BASE}/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&lang=en-US&region=IN${crumb ? `&crumb=${encodeURIComponent(crumb)}` : ""}`;
+    const res = await fetch(url, {
+      headers: { ...HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as {
+      quoteResponse?: { result?: Record<string, unknown>[] };
+    };
+    const quote = data?.quoteResponse?.result?.[0];
+    if (!quote) return {};
+    return {
+      summaryDetail: {
+        trailingPE: { raw: quote.trailingPE as number | undefined },
+        forwardPE: { raw: quote.forwardPE as number | undefined },
+        dividendYield: { raw: quote.dividendYield as number | undefined },
+        dividendRate: { raw: quote.dividendRate as number | undefined },
+        beta: { raw: quote.beta as number | undefined },
+        marketCap: { raw: quote.marketCap as number | undefined },
+      },
+      defaultKeyStatistics: {
+        trailingEps: { raw: quote.trailingEps as number | undefined },
+        priceToBook: { raw: quote.priceToBook as number | undefined },
+      },
+      assetProfile: {
+        sector: quote.sector as string | undefined,
+        industry: quote.industry as string | undefined,
+        longBusinessSummary: quote.longBusinessSummary as string | undefined,
+        country: quote.country as string | undefined,
+        fullTimeEmployees: quote.fullTimeEmployees as number | undefined,
+        website: quote.website as string | undefined,
+      },
+      price: {
+        regularMarketPrice: {
+          raw: quote.regularMarketPrice as number | undefined,
+        },
+        regularMarketChange: {
+          raw: quote.regularMarketChange as number | undefined,
+        },
+        regularMarketChangePercent: {
+          raw: quote.regularMarketChangePercent as number | undefined,
+        },
+        regularMarketVolume: {
+          raw: quote.regularMarketVolume as number | undefined,
+        },
+        regularMarketOpen: {
+          raw: quote.regularMarketOpen as number | undefined,
+        },
+        regularMarketDayHigh: {
+          raw: quote.regularMarketDayHigh as number | undefined,
+        },
+        regularMarketDayLow: {
+          raw: quote.regularMarketDayLow as number | undefined,
+        },
+        regularMarketPreviousClose: {
+          raw: quote.regularMarketPreviousClose as number | undefined,
+        },
+        marketCap: { raw: quote.marketCap as number | undefined },
+      },
+    };
+  }
+
+  try {
+    const auth = await getYFCrumb(symbol);
+    const crumb = auth?.crumb;
+    const cookie = auth?.cookie ?? "";
+    if (crumb) {
+      const url = `${YF_BASE}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`;
+      const res = await fetch(url, {
+        headers: { ...HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          quoteSummary?: { result?: YFSummary[] };
+        };
+        const result = data?.quoteSummary?.result?.[0];
+        if (result) return result;
+      }
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  try {
+    return await fetchQuoteFallback();
   } catch {
     return {};
   }
@@ -296,15 +435,30 @@ export async function fetchSummary(symbol: string): Promise<YFSummary> {
 export async function fetchHistory(
   symbol: string,
   period: string,
-  interval: string
-): Promise<{ timestamp: number; open: number; high: number; low: number; close: number; volume: number }[]> {
+  interval: string,
+): Promise<
+  {
+    timestamp: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  }[]
+> {
   const url = `${YF_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${period}`;
   const data = (await yfFetch(url)) as {
     chart?: {
       result?: {
         timestamp?: number[];
         indicators?: {
-          quote?: { open?: (number | null)[]; high?: (number | null)[]; low?: (number | null)[]; close?: (number | null)[]; volume?: (number | null)[] }[];
+          quote?: {
+            open?: (number | null)[];
+            high?: (number | null)[];
+            low?: (number | null)[];
+            close?: (number | null)[];
+            volume?: (number | null)[];
+          }[];
         };
       }[];
     };
@@ -326,13 +480,30 @@ export async function fetchHistory(
 }
 
 export async function searchYahoo(
-  query: string
-): Promise<{ symbol: string; shortname: string; exchDisp: string; typeDisp: string; sector?: string }[]> {
-  const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(query)}&lang=en-US&region=IN&quotesCount=20&newsCount=0&enableFuzzyQuery=false`;
+  query: string,
+  count = 50,
+): Promise<
+  {
+    symbol: string;
+    shortname: string;
+    exchDisp: string;
+    typeDisp: string;
+    sector?: string;
+  }[]
+> {
+  const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(query)}&lang=en-US&region=IN&quotesCount=${count}&newsCount=0&enableFuzzyQuery=false`;
   const data = (await yfFetch(url)) as {
-    quotes?: { symbol: string; shortname: string; exchDisp: string; typeDisp: string; sector?: string }[];
+    quotes?: {
+      symbol: string;
+      shortname: string;
+      exchDisp: string;
+      typeDisp: string;
+      sector?: string;
+    }[];
   };
-  return (data?.quotes ?? []).filter((q) => q.typeDisp === "equity" || q.typeDisp === "Equity");
+  return (data?.quotes ?? []).filter(
+    (q) => q.typeDisp === "equity" || q.typeDisp === "Equity",
+  );
 }
 
 /* ─── News ─────────────────────────────────────────────────────────────── */
@@ -360,22 +531,34 @@ export async function fetchMarketNews(count = 25): Promise<YFNewsItem[]> {
         const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=IN&quotesCount=0&newsCount=15&enableFuzzyQuery=false`;
         const data = (await yfFetch(url)) as { news?: YFNewsItem[] };
         for (const n of data?.news ?? []) {
-          if (!seen.has(n.uuid)) { seen.add(n.uuid); allNews.push(n); }
+          if (!seen.has(n.uuid)) {
+            seen.add(n.uuid);
+            allNews.push(n);
+          }
         }
         if (allNews.length >= count) break;
-      } catch { /* skip query */ }
+      } catch {
+        /* skip query */
+      }
     }
-    return allNews.slice(0, count).sort((a, b) => b.providerPublishTime - a.providerPublishTime);
+    return allNews
+      .slice(0, count)
+      .sort((a, b) => b.providerPublishTime - a.providerPublishTime);
   } catch {
     return [];
   }
 }
 
-export async function fetchStockNews(symbol: string, count = 15): Promise<YFNewsItem[]> {
+export async function fetchStockNews(
+  symbol: string,
+  count = 15,
+): Promise<YFNewsItem[]> {
   try {
     const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(symbol)}&lang=en-US&region=IN&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`;
     const data = (await yfFetch(url)) as { news?: YFNewsItem[] };
-    return (data?.news ?? []).sort((a, b) => b.providerPublishTime - a.providerPublishTime);
+    return (data?.news ?? []).sort(
+      (a, b) => b.providerPublishTime - a.providerPublishTime,
+    );
   } catch {
     return [];
   }
@@ -412,7 +595,7 @@ export async function fetchSectorIndices(): Promise<SectorIndexQuote[]> {
         shortName: si.name,
         sectorName: si.sector,
       } as SectorIndexQuote;
-    })
+    }),
   );
   return results.filter(Boolean) as SectorIndexQuote[];
 }
@@ -426,7 +609,7 @@ export interface SectorPerf {
   change1w: number;
   change1m: number;
   change3m: number;
-  rsRatio: number;   // RS-Ratio vs Nifty (simplified: 3m relative perf)
+  rsRatio: number; // RS-Ratio vs Nifty (simplified: 3m relative perf)
   rsMomentum: number; // RS-Momentum (1m relative perf)
   quadrant: "Leading" | "Weakening" | "Lagging" | "Improving";
 }
@@ -434,8 +617,13 @@ export interface SectorPerf {
 export async function fetchSectorPerformance(): Promise<SectorPerf[]> {
   // Fetch Nifty 50 for benchmark
   const benchmarkPromise = fetchHistory("^NSEI", "6mo", "1d");
-  const sectorPromises = SECTOR_INDICES.map(si => fetchHistory(si.symbol, "6mo", "1d"));
-  const [benchmark, ...sectorHistories] = await Promise.all([benchmarkPromise, ...sectorPromises]);
+  const sectorPromises = SECTOR_INDICES.map((si) =>
+    fetchHistory(si.symbol, "6mo", "1d"),
+  );
+  const [benchmark, ...sectorHistories] = await Promise.all([
+    benchmarkPromise,
+    ...sectorPromises,
+  ]);
 
   function lastN(arr: { close: number }[], n: number) {
     return arr.length >= n ? arr.slice(-n) : arr;
@@ -443,7 +631,9 @@ export async function fetchSectorPerformance(): Promise<SectorPerf[]> {
   function pctChange(arr: { close: number }[], n: number): number {
     const data = lastN(arr, n);
     if (data.length < 2) return 0;
-    return ((data[data.length - 1].close - data[0].close) / data[0].close) * 100;
+    return (
+      ((data[data.length - 1].close - data[0].close) / data[0].close) * 100
+    );
   }
 
   const benchmarkChange3m = pctChange(benchmark, 66);
@@ -462,9 +652,13 @@ export async function fetchSectorPerformance(): Promise<SectorPerf[]> {
     const rsMomentum = 100 + (change1m - benchmarkChange1m);
 
     const quadrant: "Leading" | "Weakening" | "Lagging" | "Improving" =
-      rsRatio >= 100 && rsMomentum >= 100 ? "Leading" :
-      rsRatio >= 100 && rsMomentum < 100 ? "Weakening" :
-      rsRatio < 100 && rsMomentum < 100 ? "Lagging" : "Improving";
+      rsRatio >= 100 && rsMomentum >= 100
+        ? "Leading"
+        : rsRatio >= 100 && rsMomentum < 100
+          ? "Weakening"
+          : rsRatio < 100 && rsMomentum < 100
+            ? "Lagging"
+            : "Improving";
 
     return {
       sector: si.sector,
@@ -510,12 +704,15 @@ function computeRSI14(closes: number[]): (number | null)[] {
   const period = 14;
   const rsi: (number | null)[] = new Array(period).fill(null);
   if (closes.length <= period) return rsi;
-  let gains = 0, losses = 0;
+  let gains = 0,
+    losses = 0;
   for (let i = 1; i <= period; i++) {
     const diff = closes[i] - closes[i - 1];
-    if (diff > 0) gains += diff; else losses -= diff;
+    if (diff > 0) gains += diff;
+    else losses -= diff;
   }
-  let avgGain = gains / period, avgLoss = losses / period;
+  let avgGain = gains / period,
+    avgLoss = losses / period;
   rsi.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
   for (let i = period + 1; i < closes.length; i++) {
     const diff = closes[i] - closes[i - 1];
@@ -526,12 +723,14 @@ function computeRSI14(closes: number[]): (number | null)[] {
   return rsi;
 }
 
-export async function fetchHistoryTable(symbol: string): Promise<HistoryTableRow[]> {
+export async function fetchHistoryTable(
+  symbol: string,
+): Promise<HistoryTableRow[]> {
   // Fetch 6 months to have enough data for 66D lookback + RSI(14) warm-up
   const hist = await fetchHistory(symbol, "6mo", "1d");
   if (hist.length === 0) return [];
 
-  const closes = hist.map(h => h.close);
+  const closes = hist.map((h) => h.close);
   const rsiArr = computeRSI14(closes);
 
   const rows: HistoryTableRow[] = [];
@@ -547,7 +746,10 @@ export async function fetchHistoryTable(symbol: string): Promise<HistoryTableRow
     const c22 = i >= 22 ? closes[i - 22] : null;
     const c66 = i >= 66 ? closes[i - 66] : null;
     const d = new Date(h.timestamp * 1000);
-    const dateStr = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    const dateStr = d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+    });
     rows.push({
       date: dateStr,
       timestamp: h.timestamp,

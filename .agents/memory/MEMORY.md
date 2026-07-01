@@ -1,0 +1,1 @@
+- [Git ops blocked in workspace](git-sandbox-restrictions.md) — sandbox blocks fetch/merge writing to workspace .git even on assigned tasks; clone origin fresh into /tmp instead.

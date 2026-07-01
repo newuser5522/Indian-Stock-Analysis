@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchQuotes } from "@/lib/yahoo-finance";
+import { fetchQuotes, searchYahoo } from "@/lib/yahoo-finance";
 import { cache } from "@/lib/cache";
-import { NSE_STOCKS } from "@/lib/stock-list";
 
 export const dynamic = "force-dynamic";
 
@@ -13,18 +12,46 @@ export async function GET(req: NextRequest) {
   const maxPe = sp.get("maxPe") ? parseFloat(sp.get("maxPe")!) : null;
   const minPb = sp.get("minPb") ? parseFloat(sp.get("minPb")!) : null;
   const maxPb = sp.get("maxPb") ? parseFloat(sp.get("maxPb")!) : null;
-  const minMarketCapCr = sp.get("minMarketCapCr") ? parseFloat(sp.get("minMarketCapCr")!) : null;
+  const minMarketCapCr = sp.get("minMarketCapCr")
+    ? parseFloat(sp.get("minMarketCapCr")!)
+    : null;
   const sortBy = sp.get("sortBy") ?? "marketCap";
   const sortOrder = sp.get("sortOrder") ?? "desc";
-  const limit = sp.get("limit") ? parseInt(sp.get("limit")!) : 100;
+  const limitParam = sp.get("limit");
+  const limit = limitParam ? parseInt(limitParam) : null;
+  const searchQuery = (sp.get("search") ?? sp.get("q") ?? "").trim();
 
-  let stocks = [...NSE_STOCKS];
+  let stocks: Array<{
+    symbol: string;
+    name: string;
+    exchange: string;
+    sector: string;
+  }> = [];
 
-  if (exchange && exchange !== "ALL") {
-    stocks = stocks.filter((s) => s.exchange === exchange);
-  }
-  if (sector) {
-    stocks = stocks.filter((s) => s.sector === sector);
+  const liveQuery =
+    searchQuery || (sector ? sector : exchange ? exchange : "").trim();
+
+  if (liveQuery) {
+    const searchResults = await searchYahoo(liveQuery, 200);
+    stocks = searchResults
+      .filter((q) => q.typeDisp === "equity" || q.typeDisp === "Equity")
+      .map((q) => ({
+        symbol: q.symbol,
+        name: q.shortname || q.symbol,
+        exchange:
+          q.exchDisp === "NSE"
+            ? "NSE"
+            : q.exchDisp === "BSE"
+              ? "BSE"
+              : q.exchDisp || "",
+        sector: q.sector ?? "",
+      }))
+      .filter((s) => {
+        if (exchange && exchange !== "ALL" && s.exchange !== exchange)
+          return false;
+        if (sector && s.sector !== sector) return false;
+        return true;
+      });
   }
 
   const symbols = stocks.map((s) => s.symbol);
@@ -33,7 +60,7 @@ export async function GET(req: NextRequest) {
   const quotes = await cache.getOrSet(
     cacheKey,
     () => fetchQuotes(symbols),
-    120_000
+    120_000,
   );
 
   const quoteMap = new Map(quotes.map((q) => [q.symbol, q]));
@@ -58,10 +85,14 @@ export async function GET(req: NextRequest) {
       };
     })
     .filter((s) => {
-      if (minPe !== null && (s.trailingPE == null || s.trailingPE < minPe)) return false;
-      if (maxPe !== null && (s.trailingPE == null || s.trailingPE > maxPe)) return false;
-      if (minPb !== null && (s.priceToBook == null || s.priceToBook < minPb)) return false;
-      if (maxPb !== null && (s.priceToBook == null || s.priceToBook > maxPb)) return false;
+      if (minPe !== null && (s.trailingPE == null || s.trailingPE < minPe))
+        return false;
+      if (maxPe !== null && (s.trailingPE == null || s.trailingPE > maxPe))
+        return false;
+      if (minPb !== null && (s.priceToBook == null || s.priceToBook < minPb))
+        return false;
+      if (maxPb !== null && (s.priceToBook == null || s.priceToBook > maxPb))
+        return false;
       if (minMarketCapCr !== null) {
         const capCr = s.marketCap != null ? s.marketCap / 1e7 : null;
         if (capCr == null || capCr < minMarketCapCr) return false;
@@ -70,11 +101,16 @@ export async function GET(req: NextRequest) {
     })
     .sort((a, b) => {
       const key = sortBy as keyof typeof a;
-      const av = (a[key] as number | undefined) ?? (sortOrder === "asc" ? Infinity : -Infinity);
-      const bv = (b[key] as number | undefined) ?? (sortOrder === "asc" ? Infinity : -Infinity);
+      const av =
+        (a[key] as number | undefined) ??
+        (sortOrder === "asc" ? Infinity : -Infinity);
+      const bv =
+        (b[key] as number | undefined) ??
+        (sortOrder === "asc" ? Infinity : -Infinity);
       return sortOrder === "asc" ? av - bv : bv - av;
-    })
-    .slice(0, limit);
+    });
 
-  return NextResponse.json(results);
+  const pagedResults = limit ? results.slice(0, limit) : results;
+
+  return NextResponse.json(pagedResults);
 }

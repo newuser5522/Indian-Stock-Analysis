@@ -1,3 +1,13 @@
 {
-  "/_not-found/page": "app/_not-found/page.js"
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/market/overview/route": "app/api/market/overview/route.js",
+  "/api/market/multi-asset/route": "app/api/market/multi-asset/route.js",
+  "/api/market/top-gainers/route": "app/api/market/top-gainers/route.js",
+  "/api/market/most-active/route": "app/api/market/most-active/route.js",
+  "/api/market/top-losers/route": "app/api/market/top-losers/route.js",
+  "/api/market/global/route": "app/api/market/global/route.js",
+  "/api/screener/route": "app/api/screener/route.js",
+  "/api/stocks/fundamentals/[symbol]/route": "app/api/stocks/fundamentals/[symbol]/route.js",
+  "/page": "app/page.js",
+  "/screener/page": "app/screener/page.js"
 }

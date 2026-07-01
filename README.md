@@ -204,5 +204,34 @@ directly for that symbol and check the HTTP status before assuming the code is w
 
 ---
 
-*Last updated: June 29, 2026, after Phase 3–4 (Gold ETF symbol fix, FII/DII loading
-fix, full regression pass).*
+## 7. Upstream sync notes (July 1, 2026)
+
+A separate GitHub Copilot session had pushed commits directly to `origin/main`
+independent of this workspace. Those commits were reconciled back in here:
+
+- Reviewed backend fetch logic and Yahoo/NSE data handling for stock fundamentals
+  and quote services.
+- Confirmed Yahoo Finance requires a valid `cookie + crumb` for
+  `query1/v7/finance/quote` and `query1/v10/finance/quoteSummary`; `v8/finance/chart`
+  remains the most reliable endpoint for chart/quote data.
+- Diagnosed an `HDFC.NS` edge case: Yahoo returns `quoteType: "NONE"` and no
+  fundamentals for that ticker, while `HDFCBANK.NS` is the correct working symbol
+  for HDFC Bank.
+- Confirmed NSE India API access can be blocked from some hosts
+  (`https://www.nseindia.com/api/quote-equity` returning `403 Forbidden`); the
+  Yahoo Finance fallback path exists for this reason.
+- Merged in the resulting source improvements: `fetchNseData`/`searchYahoo` helpers
+  and a crumbless quote-fallback path in `yahoo-finance.ts`, live Yahoo-search-based
+  stock listing in the screener API, NSE+quote fallback merging for the fundamentals
+  API, and a search box on the screener page.
+- Deliberately did **not** adopt that session's dependency/toolchain bumps (Next.js
+  16, TypeScript 6.0, Tailwind 4.3, Windows-only native binaries like
+  `@tailwindcss/oxide-win32-x64-msvc`) — those looked like accidental side effects of
+  running `pnpm install` on Windows and would break installs in this Linux
+  environment. If a real upgrade is wanted later, do it deliberately and test on
+  Linux first.
+
+---
+
+*Last updated: July 1, 2026, after reconciling upstream Copilot-session commits
+(Yahoo/NSE fundamentals fallback improvements, screener search).*
