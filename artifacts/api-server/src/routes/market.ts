@@ -79,7 +79,7 @@ router.get("/market/top-gainers", async (req, res): Promise<void> => {
     const params = GetTopGainersQueryParams.safeParse(req.query);
     const limit = params.success ? (params.data.limit ?? 10) : 10;
     const exchange = params.success ? (params.data.exchange ?? "NSE") : "NSE";
-    const quotes = exchange === "BSE" ? await getBseQuotes() : exchange === "ALL" ? await getAllQuotes() : await getNseQuotes();
+    const quotes = exchange === "BSE" ? await getBseQuotes() : await getNseQuotes();
     const enriched = quotes
       .filter((q) => q.regularMarketChangePercent != null)
       .sort((a, b) => (b.regularMarketChangePercent ?? 0) - (a.regularMarketChangePercent ?? 0))
@@ -114,7 +114,7 @@ router.get("/market/top-losers", async (req, res): Promise<void> => {
     const params = GetTopLosersQueryParams.safeParse(req.query);
     const limit = params.success ? (params.data.limit ?? 10) : 10;
     const exchange = params.success ? (params.data.exchange ?? "NSE") : "NSE";
-    const quotes = exchange === "BSE" ? await getBseQuotes() : exchange === "ALL" ? await getAllQuotes() : await getNseQuotes();
+    const quotes = exchange === "BSE" ? await getBseQuotes() : await getNseQuotes();
     const enriched = quotes
       .filter((q) => q.regularMarketChangePercent != null)
       .sort((a, b) => (a.regularMarketChangePercent ?? 0) - (b.regularMarketChangePercent ?? 0))
@@ -149,7 +149,7 @@ router.get("/market/most-active", async (req, res): Promise<void> => {
     const params = GetMostActiveQueryParams.safeParse(req.query);
     const limit = params.success ? (params.data.limit ?? 10) : 10;
     const exchange = params.success ? (params.data.exchange ?? "NSE") : "NSE";
-    const quotes = exchange === "BSE" ? await getBseQuotes() : exchange === "ALL" ? await getAllQuotes() : await getNseQuotes();
+    const quotes = exchange === "BSE" ? await getBseQuotes() : await getNseQuotes();
     const enriched = quotes
       .filter((q) => q.regularMarketVolume != null)
       .sort((a, b) => (b.regularMarketVolume ?? 0) - (a.regularMarketVolume ?? 0))
