@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchQuotes, searchYahoo } from "@/lib/yahoo-finance";
+import { NSE_STOCKS } from "@/lib/stock-list";
 import { cache } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,9 @@ export async function GET(req: NextRequest) {
     sector: string;
   }> = [];
 
-  const liveQuery =
-    searchQuery || (sector ? sector : exchange ? exchange : "").trim();
-
-  if (liveQuery) {
-    const searchResults = await searchYahoo(liveQuery, 200);
+  if (searchQuery) {
+    // User typed a search query — use Yahoo live search
+    const searchResults = await searchYahoo(searchQuery, 200);
     stocks = searchResults
       .filter((q) => q.typeDisp === "equity" || q.typeDisp === "Equity")
       .map((q) => ({
@@ -52,6 +51,13 @@ export async function GET(req: NextRequest) {
         if (sector && s.sector !== sector) return false;
         return true;
       });
+  } else {
+    // No search query — use the static stock list and filter by exchange/sector
+    stocks = NSE_STOCKS.filter((s) => {
+      if (exchange && exchange !== "ALL" && s.exchange !== exchange) return false;
+      if (sector && s.sector !== sector) return false;
+      return true;
+    });
   }
 
   const symbols = stocks.map((s) => s.symbol);

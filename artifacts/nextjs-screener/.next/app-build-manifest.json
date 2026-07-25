@@ -11,20 +11,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/page.js"
     ],
-    "/api/market/global/route": [
+    "/api/market/top-gainers/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/market/global/route.js"
+      "static/chunks/app/api/market/top-gainers/route.js"
     ],
     "/api/market/overview/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/market/overview/route.js"
-    ],
-    "/api/market/top-gainers/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/top-gainers/route.js"
     ],
     "/api/market/most-active/route": [
       "static/chunks/webpack.js",
@@ -36,15 +31,45 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/market/top-losers/route.js"
     ],
+    "/api/market/global/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/market/global/route.js"
+    ],
     "/api/market/multi-asset/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/market/multi-asset/route.js"
     ],
-    "/_not-found/page": [
+    "/screener/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+      "static/chunks/app/screener/page.js"
+    ],
+    "/api/screener/sectors/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/screener/sectors/route.js"
+    ],
+    "/api/screener/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/screener/route.js"
+    ],
+    "/portfolio/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/portfolio/page.js"
+    ],
+    "/api/portfolio/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/portfolio/route.js"
+    ],
+    "/scans/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/scans/page.js"
     ]
   }
 }
