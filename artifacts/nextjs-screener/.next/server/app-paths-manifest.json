@@ -1,5 +1,3 @@
 {
-  "/api/market/promoter-activity/route": "app/api/market/promoter-activity/route.js",
-  "/api/market/corporate-filings/route": "app/api/market/corporate-filings/route.js",
-  "/promoter-activity/page": "app/promoter-activity/page.js"
+  "/_not-found/page": "app/_not-found/page.js"
 }
