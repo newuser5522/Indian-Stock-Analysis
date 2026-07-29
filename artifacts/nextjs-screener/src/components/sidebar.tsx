@@ -7,6 +7,7 @@ import {
   BarChart3, TrendingUp, Search, Star, Menu, X, ChevronRight,
   Briefcase, Globe2, Newspaper, Zap, CalendarDays, Bell,
   DollarSign, Activity, Code2,
+  ArrowRightLeft, RotateCcw, Layers, FileText, Users, PieChart, Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -30,6 +31,15 @@ const NAV_GROUPS = [
       { href: "/fii-dii", label: "FII / DII", icon: Activity },
       { href: "/forex", label: "Forex / USD-INR", icon: DollarSign },
       { href: "/gold-etf", label: "Gold ETFs", icon: CoinsIcon },
+      { href: "/bulk-deals", label: "Bulk Deals", icon: ArrowRightLeft },
+    ],
+  },
+  {
+    label: "Analytics",
+    items: [
+      { href: "/market-breadth", label: "Market Breadth", icon: Gauge },
+      { href: "/industry-rotation", label: "Industry Rotation", icon: RotateCcw },
+      { href: "/futures", label: "Futures Dashboard", icon: Layers },
     ],
   },
   {
@@ -53,6 +63,9 @@ const NAV_GROUPS = [
     items: [
       { href: "/news", label: "News", icon: Newspaper },
       { href: "/calendar", label: "Calendar", icon: CalendarDays },
+      { href: "/corporate-filings", label: "Corporate Filings", icon: FileText },
+      { href: "/promoter-activity", label: "Promoter Activity", icon: Users },
+      { href: "/quarterly-results", label: "Quarterly Results", icon: PieChart },
     ],
   },
 ];
