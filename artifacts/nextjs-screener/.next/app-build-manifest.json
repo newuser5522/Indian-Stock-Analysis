@@ -6,75 +6,10 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/bulk-deals/page": [
+    "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/bulk-deals/page.js"
-    ],
-    "/api/market/bulk-deals/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/bulk-deals/route.js"
-    ],
-    "/market-breadth/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/market-breadth/page.js"
-    ],
-    "/api/market/market-breadth/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/market-breadth/route.js"
-    ],
-    "/futures/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/futures/page.js"
-    ],
-    "/api/market/futures-dashboard/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/futures-dashboard/route.js"
-    ],
-    "/industry-rotation/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/industry-rotation/page.js"
-    ],
-    "/api/market/industry-rotation/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/industry-rotation/route.js"
-    ],
-    "/quarterly-results/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/quarterly-results/page.js"
-    ],
-    "/api/market/quarterly-results/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/quarterly-results/route.js"
-    ],
-    "/corporate-filings/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/corporate-filings/page.js"
-    ],
-    "/api/market/corporate-filings/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/corporate-filings/route.js"
-    ],
-    "/promoter-activity/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/promoter-activity/page.js"
-    ],
-    "/api/market/promoter-activity/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/market/promoter-activity/route.js"
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }
