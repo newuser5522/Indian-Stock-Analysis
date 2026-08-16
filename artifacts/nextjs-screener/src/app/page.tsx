@@ -218,7 +218,7 @@ export default function MarketPage() {
   const regionIndices = (globalIndices ?? []).filter((g) => g.region === globalRegion);
 
   return (
-    <div className="space-y-6 max-w-screen-xl">
+    <div className="space-y-6 max-w-7xl">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -242,7 +242,7 @@ export default function MarketPage() {
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
           {indicesLoading
             ? [...Array(6)].map((_, i) => (
-                <div key={i} className="rounded-lg border bg-card p-4 h-[88px] animate-pulse" />
+                <div key={i} className="rounded-lg border bg-card p-4 h-22 animate-pulse" />
               ))
             : (indices ?? []).map((q) => <IndexCard key={q.symbol} q={q} />)}
         </div>
@@ -257,7 +257,7 @@ export default function MarketPage() {
         {multiLoading ? (
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
             {[...Array(7)].map((_, i) => (
-              <div key={i} className="rounded-lg border bg-card p-3 h-[84px] animate-pulse" />
+              <div key={i} className="rounded-lg border bg-card p-3 h-21 animate-pulse" />
             ))}
           </div>
         ) : (
