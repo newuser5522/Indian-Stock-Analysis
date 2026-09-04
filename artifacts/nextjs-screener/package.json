@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS=--max-http-header-size=1000000 next dev --port ${PORT:-24507}",
+    "dev": "cross-env NODE_OPTIONS=--max-http-header-size=1000000 next dev --port 24507",
     "build": "next build",
-    "start": "NODE_OPTIONS=--max-http-header-size=1000000 next start --port ${PORT:-24507}",
+    "start": "cross-env NODE_OPTIONS=--max-http-header-size=1000000 next start --port 24507",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -38,6 +38,7 @@
     "@radix-ui/react-tooltip": "^1.2.11",
     "@tanstack/react-query": "catalog:",
     "@workspace/db": "workspace:*",
+    "cross-env": "^7.0.3",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "^1.1.1",

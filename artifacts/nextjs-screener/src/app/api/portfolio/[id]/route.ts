@@ -5,22 +5,44 @@ import { eq } from "drizzle-orm";
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!db) {
+    return NextResponse.json(
+      {
+        error: "Database not configured. Portfolio feature is unavailable.",
+        message:
+          "Set DATABASE_URL environment variable to enable portfolio features.",
+      },
+      { status: 503 },
+    );
+  }
   const { id } = await params;
   const numId = parseInt(id, 10);
-  if (isNaN(numId)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  if (isNaN(numId))
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   await db.delete(portfolioTable).where(eq(portfolioTable.id, numId));
   return NextResponse.json({ success: true });
 }
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!db) {
+    return NextResponse.json(
+      {
+        error: "Database not configured. Portfolio feature is unavailable.",
+        message:
+          "Set DATABASE_URL environment variable to enable portfolio features.",
+      },
+      { status: 503 },
+    );
+  }
   const { id } = await params;
   const numId = parseInt(id, 10);
-  if (isNaN(numId)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  if (isNaN(numId))
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const body = (await req.json()) as {
     quantity?: number;
     avgPrice?: number;

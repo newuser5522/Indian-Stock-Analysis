@@ -7,7 +7,20 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const rows = await db.select().from(watchlistTable).orderBy(watchlistTable.addedAt);
+    if (!db) {
+      return NextResponse.json(
+        {
+          error: "Database not configured. Watchlist feature is unavailable.",
+          message:
+            "Set DATABASE_URL environment variable to enable watchlist features.",
+        },
+        { status: 503 },
+      );
+    }
+    const rows: (typeof watchlistTable.$inferSelect)[] = await db
+      .select()
+      .from(watchlistTable)
+      .orderBy(watchlistTable.addedAt);
     const symbols = rows.map((r) => r.symbol);
     if (symbols.length === 0) return NextResponse.json([]);
 
@@ -18,10 +31,14 @@ export async function GET() {
       const q = quoteMap.get(r.symbol);
       const currentPrice = q?.regularMarketPrice;
       const addedPrice = r.addedPrice ?? undefined;
-      const priceDiff = currentPrice != null && addedPrice != null ? currentPrice - addedPrice : undefined;
-      const pricePct = priceDiff != null && addedPrice != null && addedPrice > 0
-        ? (priceDiff / addedPrice) * 100
-        : undefined;
+      const priceDiff =
+        currentPrice != null && addedPrice != null
+          ? currentPrice - addedPrice
+          : undefined;
+      const pricePct =
+        priceDiff != null && addedPrice != null && addedPrice > 0
+          ? (priceDiff / addedPrice) * 100
+          : undefined;
       return {
         symbol: r.symbol,
         addedAt: r.addedAt,
@@ -39,29 +56,49 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (err) {
     console.error("watchlist GET error", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    if (!db) {
+      return NextResponse.json(
+        {
+          error: "Database not configured. Watchlist feature is unavailable.",
+          message:
+            "Set DATABASE_URL environment variable to enable watchlist features.",
+        },
+        { status: 503 },
+      );
+    }
     const body = (await req.json()) as { symbol?: string };
     const symbol = body.symbol?.trim();
-    if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
+    if (!symbol)
+      return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
     // Fetch current price to store as addedPrice
     let addedPrice: number | undefined;
     try {
       const quotes = await fetchQuotes([symbol]);
       addedPrice = quotes[0]?.regularMarketPrice ?? undefined;
-    } catch { /* optional */ }
+    } catch {
+      /* optional */
+    }
 
-    await db.insert(watchlistTable)
+    await db
+      .insert(watchlistTable)
       .values({ symbol, name: symbol, exchange: "NSE", addedPrice })
       .onConflictDoNothing();
     return NextResponse.json({ symbol }, { status: 201 });
   } catch (err) {
     console.error("watchlist POST error", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

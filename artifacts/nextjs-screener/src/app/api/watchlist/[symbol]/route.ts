@@ -7,15 +7,29 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ symbol: string }> }
+  { params }: { params: Promise<{ symbol: string }> },
 ) {
   try {
+    if (!db) {
+      return NextResponse.json(
+        {
+          error: "Database not configured. Watchlist feature is unavailable.",
+          message:
+            "Set DATABASE_URL environment variable to enable watchlist features.",
+        },
+        { status: 503 },
+      );
+    }
     const { symbol } = await params;
-    if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
+    if (!symbol)
+      return NextResponse.json({ error: "symbol required" }, { status: 400 });
     await db.delete(watchlistTable).where(eq(watchlistTable.symbol, symbol));
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("watchlist DELETE error", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

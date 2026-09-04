@@ -13,7 +13,10 @@ const router: IRouter = Router();
 
 router.get("/watchlist", async (req, res): Promise<void> => {
   try {
-    const items = await db.select().from(watchlistTable).orderBy(watchlistTable.addedAt);
+    const items: (typeof watchlistTable.$inferSelect)[] = await db
+      .select()
+      .from(watchlistTable)
+      .orderBy(watchlistTable.addedAt);
     if (items.length === 0) {
       res.json(GetWatchlistResponse.parse({ items: [] }));
       return;
@@ -62,7 +65,10 @@ router.post("/watchlist", async (req, res): Promise<void> => {
       });
       return;
     }
-    const [item] = await db.insert(watchlistTable).values(parsed.data).returning();
+    const [item] = await db
+      .insert(watchlistTable)
+      .values(parsed.data)
+      .returning();
     res.status(201).json({
       id: item.id,
       symbol: item.symbol,
@@ -83,7 +89,9 @@ router.delete("/watchlist/:symbol", async (req, res): Promise<void> => {
       res.status(400).json({ error: params.error.message });
       return;
     }
-    await db.delete(watchlistTable).where(eq(watchlistTable.symbol, params.data.symbol));
+    await db
+      .delete(watchlistTable)
+      .where(eq(watchlistTable.symbol, params.data.symbol));
     res.json(RemoveFromWatchlistResponse.parse({ success: true }));
   } catch (err) {
     req.log.error({ err }, "Failed to remove from watchlist");
