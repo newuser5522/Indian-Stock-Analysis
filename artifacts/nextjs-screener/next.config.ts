@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: process.env.BASE_PATH || "/nextjs",
+  basePath: process.env.BASE_PATH ?? "/nextjs",
 
   // Development only - allow all origins
   allowedDevOrigins: process.env.NODE_ENV === "production" ? undefined : ["*"],

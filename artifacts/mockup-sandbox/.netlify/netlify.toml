@@ -1,0 +1,30 @@
+plugins = []
+headers = []
+redirects = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/opt/build/repo/artifacts/nextjs-screener/artifacts/mockup-sandbox/dist"
+publishOrigin = "ui"
+commandOrigin = "config"
+command = "pnpm run build"
+base = "/opt/build/repo/artifacts/nextjs-screener"
+
+[build.environment]
+BASE_PATH = ""
+NEXT_PUBLIC_BASE_PATH = ""
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]

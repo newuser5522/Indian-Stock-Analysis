@@ -1,0 +1,11 @@
+[build]
+  base = "artifacts/nextjs-screener"
+  command = "pnpm run build"
+  publish = ".next"
+
+[build.environment]
+  BASE_PATH = ""
+  NEXT_PUBLIC_BASE_PATH = ""
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
