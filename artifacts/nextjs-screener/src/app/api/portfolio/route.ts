@@ -5,19 +5,7 @@ import { fetchQuotes } from "@/lib/yahoo-finance";
 
 export async function GET() {
   try {
-    if (!db) {
-      return NextResponse.json(
-        {
-          error: "Database not configured. Portfolio feature is unavailable.",
-          message:
-            "Set DATABASE_URL environment variable to enable portfolio features.",
-        },
-        { status: 503 },
-      );
-    }
-    const holdings: (typeof portfolioTable.$inferSelect)[] = await db
-      .select()
-      .from(portfolioTable);
+    const holdings = await db.select().from(portfolioTable);
     if (holdings.length === 0) return NextResponse.json([]);
     const symbols = [...new Set(holdings.map((h) => h.symbol))];
     const quotes = await fetchQuotes(symbols);
@@ -25,19 +13,14 @@ export async function GET() {
     const result = holdings.map((h) => {
       const q = quoteMap.get(h.symbol);
       const currentPrice = q?.regularMarketPrice ?? null;
-      const currentValue =
-        currentPrice != null ? currentPrice * h.quantity : null;
+      const currentValue = currentPrice != null ? currentPrice * h.quantity : null;
       const invested = h.avgPrice * h.quantity;
       const pnl = currentValue != null ? currentValue - invested : null;
-      const pnlPct =
-        pnl != null && invested > 0 ? (pnl / invested) * 100 : null;
+      const pnlPct = pnl != null && invested > 0 ? (pnl / invested) * 100 : null;
       let cagr: number | null = null;
       if (h.purchaseDate && currentValue != null && invested > 0) {
-        const years =
-          (Date.now() - new Date(h.purchaseDate).getTime()) /
-          (365.25 * 24 * 3600 * 1000);
-        if (years > 0.01)
-          cagr = (Math.pow(currentValue / invested, 1 / years) - 1) * 100;
+        const years = (Date.now() - new Date(h.purchaseDate).getTime()) / (365.25 * 24 * 3600 * 1000);
+        if (years > 0.01) cagr = (Math.pow(currentValue / invested, 1 / years) - 1) * 100;
       }
       return {
         ...h,
@@ -54,25 +37,12 @@ export async function GET() {
     return NextResponse.json(result);
   } catch (err) {
     console.error(err);
-    return NextResponse.json(
-      { error: "Failed to fetch portfolio" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to fetch portfolio" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    if (!db) {
-      return NextResponse.json(
-        {
-          error: "Database not configured. Portfolio feature is unavailable.",
-          message:
-            "Set DATABASE_URL environment variable to enable portfolio features.",
-        },
-        { status: 503 },
-      );
-    }
     const body = (await req.json()) as {
       symbol: string;
       name?: string;
@@ -83,10 +53,7 @@ export async function POST(req: NextRequest) {
       notes?: string;
     };
     if (!body.symbol || !body.quantity || !body.avgPrice) {
-      return NextResponse.json(
-        { error: "symbol, quantity, avgPrice required" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "symbol, quantity, avgPrice required" }, { status: 400 });
     }
     const [inserted] = await db
       .insert(portfolioTable)
@@ -103,9 +70,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(inserted, { status: 201 });
   } catch (err) {
     console.error(err);
-    return NextResponse.json(
-      { error: "Failed to add holding" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to add holding" }, { status: 500 });
   }
 }

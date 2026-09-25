@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  fetchFinancialRatios,
   fetchNseData,
   fetchQuotes,
   fetchSummary,
@@ -19,7 +20,7 @@ export async function GET(
     return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
   const cacheKey = `stock:fundamentals:${symbol}`;
-  return cache.getOrSet(
+  const data = await cache.getOrSet(
     cacheKey,
     async () => {
       const normalizedSymbol = symbol.replace(/\.(NS|BO)$/i, "").toUpperCase();
@@ -37,15 +38,19 @@ export async function GET(
         if (nseMatch) canonicalSymbol = nseMatch.symbol;
       }
 
-      const [summary, [quote], nse] = await Promise.all([
+      const [summary, [quote], nse, financialRatios] = await Promise.all([
         fetchSummary(canonicalSymbol),
         fetchQuotes([canonicalSymbol]),
         fetchNseData(canonicalSymbol),
+        fetchFinancialRatios(canonicalSymbol),
       ]);
+      const trailingPE =
+        summary.summaryDetail?.trailingPE?.raw ?? quote?.trailingPE ?? nse.pe;
+      const earningsGrowth =
+        summary.defaultKeyStatistics?.earningsQuarterlyGrowth?.raw;
 
-      const data = {
-        trailingPE:
-          summary.summaryDetail?.trailingPE?.raw ?? quote?.trailingPE ?? nse.pe,
+      return {
+        trailingPE,
         forwardPE: summary.summaryDetail?.forwardPE?.raw ?? quote?.forwardPE,
         priceToBook:
           summary.defaultKeyStatistics?.priceToBook?.raw ?? quote?.priceToBook,
@@ -60,7 +65,11 @@ export async function GET(
           (quote && quote.forwardPE && quote.regularMarketPrice
             ? quote.regularMarketPrice / quote.forwardPE
             : undefined),
-        pegRatio: summary.defaultKeyStatistics?.pegRatio?.raw,
+        pegRatio:
+          summary.defaultKeyStatistics?.pegRatio?.raw ??
+          (trailingPE != null && earningsGrowth != null && earningsGrowth > 0
+            ? trailingPE / (earningsGrowth * 100)
+            : undefined),
         beta:
           summary.summaryDetail?.beta?.raw ??
           summary.defaultKeyStatistics?.beta?.raw ??
@@ -77,12 +86,18 @@ export async function GET(
             ? nse.marketCapCrores * 1_000_000_00
             : undefined),
         returnOnEquity:
-          summary.financialData?.returnOnEquity?.raw ?? quote?.returnOnEquity,
-        returnOnAssets: summary.financialData?.returnOnAssets?.raw,
+          summary.financialData?.returnOnEquity?.raw ??
+          quote?.returnOnEquity ??
+          financialRatios.returnOnEquity,
+        returnOnAssets:
+          summary.financialData?.returnOnAssets?.raw ??
+          financialRatios.returnOnAssets,
         grossMargins: summary.financialData?.grossMargins?.raw,
         operatingMargins: summary.financialData?.operatingMargins?.raw,
         profitMargins: summary.financialData?.profitMargins?.raw,
-        currentRatio: summary.financialData?.currentRatio?.raw,
+        currentRatio:
+          summary.financialData?.currentRatio?.raw ??
+          financialRatios.currentRatio,
         debtToEquity: summary.financialData?.debtToEquity?.raw,
         revenueGrowth: summary.financialData?.revenueGrowth?.raw,
         totalRevenue: summary.financialData?.totalRevenue?.raw,
@@ -102,8 +117,9 @@ export async function GET(
         fullTimeEmployees: summary.assetProfile?.fullTimeEmployees,
         website: summary.assetProfile?.website,
       };
-      return NextResponse.json(data);
     },
     300_000,
   );
+
+  return NextResponse.json(data);
 }

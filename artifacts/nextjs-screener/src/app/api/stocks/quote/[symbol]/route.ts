@@ -12,13 +12,14 @@ export async function GET(
   if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
   const cacheKey = `stock:quote:${symbol}`;
-  return cache.getOrSet(
+  const quote = await cache.getOrSet(
     cacheKey,
     async () => {
       const quotes = await fetchQuotes([symbol]);
-      if (!quotes[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
-      return NextResponse.json(quotes[0]);
+      return quotes[0] ?? null;
     },
     60_000
   );
+  if (!quote) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return NextResponse.json(quote);
 }

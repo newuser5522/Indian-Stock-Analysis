@@ -4,8 +4,7 @@ A full-stack Next.js 15 App Router app for Indian stock market analytics. Covers
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/nextjs-screener run dev` — Next.js dev server (port 24507, path `/nextjs/`)
-- `pnpm --filter @workspace/api-server run dev` — Legacy Express API (port 8080, path `/api/`)
+- `pnpm --filter @workspace/nextjs-screener run dev` — Next.js dev server (port 24507, path `/`)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
@@ -14,8 +13,7 @@ A full-stack Next.js 15 App Router app for Indian stock market analytics. Covers
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- **Next.js 15** App Router (primary app at `/nextjs/`)
-- Legacy API: Express 5 (still running at `/api/`)
+- **Next.js 15** App Router (primary app at `/`)
 - DB: PostgreSQL + Drizzle ORM (`@workspace/db`)
 - Styling: Tailwind CSS v4 + shadcn/ui components
 - Charts: Recharts (price + RSI charts)
@@ -82,11 +80,12 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 
 ## Architecture decisions
 
-- **Next.js basePath `/nextjs`**: avoids conflict with the legacy Express API at `/api`. Client fetches use `apiUrl('/...')` which prepends `NEXT_PUBLIC_BASE_PATH`.
+- **Next.js at the root path**: the app owns `/` and its internal API routes own `/api`. Client fetches use `apiUrl('/...')` so this remains safe if the artifact is mounted under another path later.
 - **Server-side caching**: In-memory TTL cache (`src/lib/cache.ts`) per Next.js process. Market data: 60s TTL, fundamentals: 5min TTL, screener quotes: 2min TTL.
 - **Yahoo Finance**: Uses chart API v8 (no auth required) for quotes/history. Uses quoteSummary v10 with crumb for fundamentals, falling back to a crumbless `v7/finance/quote` call (`fetchQuoteFallback` in `yahoo-finance.ts`) if the crumb/session fails.
 - **NSE India session**: `src/lib/nse.ts` establishes a cookie session by first hitting the NSE homepage (stores cookies), waits 350ms, then fires the API call. All NSE-specific routes use `fetchNseApi<T>(path)` from this helper.
 - **NSE mock fallbacks**: Every NSE-specific API route (bulk deals, corporate filings, promoter activity, quarterly results, futures dashboard) has a hardcoded mock fallback that fires when the live NSE call fails or returns no data — so the UI always renders.
+- **API response caching**: Cache plain data objects, not `NextResponse` instances. Each request creates a fresh JSON response so cached response bodies remain readable.
 - **Screener search**: `api/screener/route.ts` falls back to the full `NSE_STOCKS` static list when no search query is provided (fixes blank Screener and Scans pages).
 - **Fundamentals fallback chain**: `api/stocks/fundamentals/[symbol]/route.ts` merges `fetchSummary` (quoteSummary), `fetchQuotes`, and `fetchNseData` (NSE India quote-equity API) results, since any one source can be missing fields or blocked.
 - **RSI(14)**: Computed client-side from OHLCV history data in the stock detail page.
@@ -133,7 +132,7 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 
 ## Gotchas
 
-- `NEXT_PUBLIC_BASE_PATH` must be set to `/nextjs` for client-side fetch calls to route correctly through the proxy
+- `NEXT_PUBLIC_BASE_PATH` is empty for the root-mounted app so client-side fetch calls target the Next.js `/api` routes
 - Yahoo Finance crumb is session-bound; if `fetchSummary` fails, fundamentals will return empty (non-fatal)
 - The in-memory cache resets on each Next.js server restart (dev) — that's expected behavior
 - Do not run `pnpm dev` at workspace root; use the workflow or `pnpm --filter` syntax

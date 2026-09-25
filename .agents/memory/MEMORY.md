@@ -1,1 +1,4 @@
 - [Git ops blocked in workspace](git-sandbox-restrictions.md) — sandbox blocks fetch/merge writing to workspace .git even on assigned tasks; clone origin fresh into /tmp instead.
+- [Yahoo fundamentals fallbacks](yahoo-fundamentals-fallbacks.md) — summary omits some ratios; use one fundamentals-timeseries request per statement type.
+- [Yahoo index baselines](yahoo-index-baselines.md) — index daily chart metadata can have a stale previous close; use the 1m/1d chart request for index changes.
+- [Indian stock search](indian-search-results.md) — Yahoo search returns global matches; keep FinTrack search results limited to NSE/BSE symbols.

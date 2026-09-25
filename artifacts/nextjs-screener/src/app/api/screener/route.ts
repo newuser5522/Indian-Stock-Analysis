@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchQuotes, searchYahoo } from "@/lib/yahoo-finance";
 import { NSE_STOCKS } from "@/lib/stock-list";
 import { cache } from "@/lib/cache";
+import { fetchScreenerFundamentals } from "@/lib/screener-fundamentals";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,21 @@ export async function GET(req: NextRequest) {
   }> = [];
 
   if (searchQuery) {
-    // User typed a search query — use Yahoo live search
+    // Start with the known Indian list so exact symbols such as BEL and
+    // RELIANCE keep their sector/exchange metadata even if Yahoo search is
+    // slow or returns a global match first.
+    const normalizedQuery = searchQuery.toLowerCase();
+    const knownMatches = NSE_STOCKS.filter((stock) => {
+      const baseSymbol = stock.symbol.replace(/\.(NS|BO)$/i, "").toLowerCase();
+      return (
+        baseSymbol.includes(normalizedQuery) ||
+        stock.name.toLowerCase().includes(normalizedQuery)
+      );
+    });
+
+    // Supplement with Yahoo live search for stocks outside the bundled list.
     const searchResults = await searchYahoo(searchQuery, 200);
-    stocks = searchResults
+    const yahooMatches = searchResults
       .filter((q) => q.typeDisp === "equity" || q.typeDisp === "Equity")
       .map((q) => ({
         symbol: q.symbol,
@@ -45,7 +58,15 @@ export async function GET(req: NextRequest) {
               : q.exchDisp || "",
         sector: q.sector ?? "",
       }))
-      .filter((s) => {
+      .filter((s) => s.exchange === "NSE" || s.exchange === "BSE");
+
+    const merged = new Map<string, (typeof knownMatches)[number] | (typeof yahooMatches)[number]>();
+    for (const stock of knownMatches) merged.set(stock.symbol, stock);
+    for (const stock of yahooMatches) {
+      if (!merged.has(stock.symbol)) merged.set(stock.symbol, stock);
+    }
+
+    stocks = [...merged.values()].filter((s) => {
         if (exchange && exchange !== "ALL" && s.exchange !== exchange)
           return false;
         if (sector && s.sector !== sector) return false;
@@ -70,10 +91,12 @@ export async function GET(req: NextRequest) {
   );
 
   const quoteMap = new Map(quotes.map((q) => [q.symbol, q]));
+  const fundamentalsMap = await fetchScreenerFundamentals(symbols);
 
   const results = stocks
     .map((s) => {
       const q = quoteMap.get(s.symbol);
+      const f = fundamentalsMap.get(s.symbol);
       return {
         symbol: s.symbol,
         name: s.name,
@@ -83,11 +106,11 @@ export async function GET(req: NextRequest) {
         regularMarketChange: q?.regularMarketChange,
         regularMarketChangePercent: q?.regularMarketChangePercent,
         regularMarketVolume: q?.regularMarketVolume,
-        marketCap: q?.marketCap,
-        trailingPE: q?.trailingPE,
-        priceToBook: q?.priceToBook,
-        dividendYield: q?.dividendYield,
-        returnOnEquity: q?.returnOnEquity,
+        marketCap: q?.marketCap ?? f?.marketCap,
+        trailingPE: q?.trailingPE ?? f?.trailingPE,
+        priceToBook: q?.priceToBook ?? f?.priceToBook,
+        dividendYield: q?.dividendYield ?? f?.dividendYield,
+        returnOnEquity: q?.returnOnEquity ?? f?.returnOnEquity,
       };
     })
     .filter((s) => {

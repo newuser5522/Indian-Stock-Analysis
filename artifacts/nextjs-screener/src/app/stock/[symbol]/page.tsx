@@ -5,10 +5,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ComposedChart, LineChart, Line, Bar, XAxis, YAxis, Tooltip,
+  ComposedChart, LineChart, Line, Bar, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea, Legend,
 } from "recharts";
-import { ArrowLeft, Star, StarOff, TrendingUp, TrendingDown, ExternalLink, Clock, FileText, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Star, StarOff, TrendingUp, TrendingDown, ExternalLink, Clock, FileText, AlertTriangle, Activity, Gauge, BarChart3, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiUrl } from "@/lib/api-url";
 import {
@@ -29,6 +29,7 @@ interface Quote {
 interface Fundamental {
   trailingPE?: number; forwardPE?: number; priceToBook?: number; trailingEps?: number;
   forwardEps?: number; dividendYield?: number; dividendRate?: number; beta?: number;
+  marketCap?: number;
   returnOnEquity?: number; returnOnAssets?: number; grossMargins?: number;
   operatingMargins?: number; profitMargins?: number; currentRatio?: number;
   debtToEquity?: number; revenueGrowth?: number; totalRevenue?: number; freeCashflow?: number;
@@ -43,6 +44,19 @@ interface HistoryRow {
 interface NewsItem { uuid: string; title: string; publisher: string; link: string; providerPublishTime: number; relatedTickers?: string[] }
 interface WatchlistItem { symbol: string }
 interface Filing { title: string; date: string; type: string; category: string; url?: string }
+interface TechnicalPoint {
+  date: string;
+  close: number;
+  volume: number;
+  rsi: number | null;
+  sma20: number | null;
+  sma50: number | null;
+  ema20: number | null;
+  macd: number | null;
+  signal: number | null;
+  roc20: number | null;
+  volatility: number | null;
+}
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
 const PERIODS = [
@@ -112,6 +126,115 @@ function pctCell(v: number | null): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
+function computeTechnicalData(
+  data: { date: string; close: number; volume: number; rsi: number | null }[],
+): TechnicalPoint[] {
+  let ema12: number | null = null;
+  let ema26: number | null = null;
+  let signal: number | null = null;
+  const alpha12 = 2 / 13;
+  const alpha26 = 2 / 27;
+  const alphaSignal = 2 / 10;
+
+  return data.map((point, index) => {
+    ema12 = ema12 == null ? point.close : point.close * alpha12 + ema12 * (1 - alpha12);
+    ema26 = ema26 == null ? point.close : point.close * alpha26 + ema26 * (1 - alpha26);
+    const macd = ema12 - ema26;
+    signal = signal == null ? macd : macd * alphaSignal + signal * (1 - alphaSignal);
+
+    const window20 = data.slice(Math.max(0, index - 19), index + 1).map((item) => item.close);
+    const window50 = data.slice(Math.max(0, index - 49), index + 1).map((item) => item.close);
+    const sma20 = window20.length >= 20
+      ? window20.reduce((sum, value) => sum + value, 0) / window20.length
+      : null;
+    const sma50 = window50.length >= 50
+      ? window50.reduce((sum, value) => sum + value, 0) / window50.length
+      : null;
+    const mean20 = sma20;
+    const standardDeviation = mean20 == null
+      ? null
+      : Math.sqrt(window20.reduce((sum, value) => sum + (value - mean20!) ** 2, 0) / window20.length);
+    const volatility = standardDeviation != null && mean20 != null && mean20 !== 0
+      ? (standardDeviation / mean20) * 100
+      : null;
+    const oldClose = index >= 20 ? data[index - 20].close : null;
+
+    return {
+      date: point.date,
+      close: point.close,
+      volume: point.volume,
+      rsi: point.rsi,
+      sma20,
+      sma50,
+      ema20: ema12,
+      macd,
+      signal,
+      roc20: oldClose ? ((point.close - oldClose) / oldClose) * 100 : null,
+      volatility,
+    };
+  });
+}
+
+function MiniLineCard({
+  title,
+  subtitle,
+  data,
+  dataKey,
+  color,
+  value,
+  formatter = (v) => v.toFixed(2),
+  bar = false,
+}: {
+  title: string;
+  subtitle: string;
+  data: TechnicalPoint[];
+  dataKey: keyof TechnicalPoint;
+  color: string;
+  value: string;
+  formatter?: (value: number) => string;
+  bar?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-3 min-w-0">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold truncate">{title}</div>
+          <div className="text-[10px] text-muted-foreground truncate">{subtitle}</div>
+        </div>
+        <div className="text-sm font-bold tabular-nums whitespace-nowrap">{value}</div>
+      </div>
+      <ResponsiveContainer width="100%" height={92}>
+        <ComposedChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
+          <XAxis dataKey="date" hide />
+          <YAxis hide domain={["auto", "auto"]} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(v) => [
+              typeof v === "number" ? formatter(v) : "—",
+              title,
+            ]}
+            labelFormatter={(label) => String(label)}
+          />
+          {bar ? (
+            <Bar dataKey={String(dataKey)} fill={color} opacity={0.72} radius={[2, 2, 0, 0]} />
+          ) : (
+            <Area
+              type="monotone"
+              dataKey={String(dataKey)}
+              stroke={color}
+              fill={color}
+              fillOpacity={0.12}
+              strokeWidth={1.8}
+              dot={false}
+              connectNulls
+            />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /* ─── RSI chart with coloured bands ─────────────────────────────────────── */
 function RSIChart({ data }: { data: { date: string; rsi: number | null }[] }) {
   // Build 3 series for coloured line segments
@@ -166,7 +289,7 @@ function RSIChart({ data }: { data: { date: string; rsi: number | null }[] }) {
 export default function StockPage() {
   const params = useParams();
   const rawSymbol = decodeURIComponent((params?.symbol as string | undefined) ?? "");
-  const [period, setPeriod] = useState(PERIODS[1]);
+  const [period, setPeriod] = useState(PERIODS[2]);
   const [activeTab, setActiveTab] = useState<StockTab>("Price Chart");
   const queryClient = useQueryClient();
 
@@ -229,6 +352,22 @@ export default function StockPage() {
     volume: h.volume,
     rsi: rsiArr[i] ?? null,
   }));
+  const technicalData = computeTechnicalData(chartData);
+  const latestTechnical = technicalData[technicalData.length - 1];
+  const averageVolume = technicalData.length
+    ? technicalData.reduce((sum, point) => sum + point.volume, 0) / technicalData.length
+    : 0;
+  const volumeRatio = latestTechnical && averageVolume > 0
+    ? latestTechnical.volume / averageVolume
+    : null;
+  const trendIsPositive = latestTechnical?.ema20 != null && latestTechnical.close >= latestTechnical.ema20;
+  const rsiLabel = latestTechnical?.rsi == null
+    ? "Building"
+    : latestTechnical.rsi > 70
+      ? "Overbought"
+      : latestTechnical.rsi < 30
+        ? "Oversold"
+        : "Neutral";
 
   const chg = quote?.regularMarketChangePercent ?? 0;
   const lineColor = chg >= 0 ? "#22c55e" : "#ef4444";
@@ -310,7 +449,14 @@ export default function StockPage() {
           <StatRow label="High" value={formatPrice(quote?.regularMarketDayHigh)} />
           <StatRow label="Low" value={formatPrice(quote?.regularMarketDayLow)} />
           <StatRow label="Volume" value={formatVolume(quote?.regularMarketVolume)} />
-          <StatRow label="Market Cap" value={quote?.marketCap ? formatMarketCap(quote.marketCap / 1e7) : "—"} />
+          <StatRow
+            label="Market Cap"
+            value={
+              (quote?.marketCap ?? fundamentals?.marketCap) != null
+                ? formatMarketCap((quote?.marketCap ?? fundamentals?.marketCap)! / 1e7)
+                : "—"
+            }
+          />
         </div>
       </div>
 
@@ -371,6 +517,126 @@ export default function StockPage() {
               <RSIChart data={chartData} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Technical dashboard */}
+      {activeTab === "Price Chart" && !historyLoading && technicalData.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                Technical Dashboard
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Trend, momentum, volatility and volume signals from the selected period
+              </p>
+            </div>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              {technicalData.length} observations · {period.label}
+            </span>
+          </div>
+
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <TrendingUp className="h-3.5 w-3.5 text-primary" /> Trend
+              </div>
+              <div className={`text-lg font-bold ${trendIsPositive ? "text-green-400" : "text-red-400"}`}>
+                {trendIsPositive ? "Bullish" : "Bearish"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                Price vs EMA 20
+              </div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <Gauge className="h-3.5 w-3.5 text-amber-400" /> RSI (14)
+              </div>
+              <div className="text-lg font-bold tabular-nums">
+                {latestTechnical?.rsi != null ? latestTechnical.rsi.toFixed(1) : "—"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">{rsiLabel}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <Zap className="h-3.5 w-3.5 text-cyan-400" /> MACD
+              </div>
+              <div className={`text-lg font-bold tabular-nums ${(latestTechnical?.macd ?? 0) >= (latestTechnical?.signal ?? 0) ? "text-green-400" : "text-red-400"}`}>
+                {(latestTechnical?.macd ?? 0).toFixed(2)}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                {(latestTechnical?.macd ?? 0) >= (latestTechnical?.signal ?? 0) ? "Positive momentum" : "Negative momentum"}
+              </div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <BarChart3 className="h-3.5 w-3.5 text-purple-400" /> Volume
+              </div>
+              <div className="text-lg font-bold tabular-nums">
+                {volumeRatio != null ? `${volumeRatio.toFixed(1)}x` : "—"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">vs selected-period average</div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <MiniLineCard
+              title="RSI (14)"
+              subtitle="Momentum oscillator · 30 / 70 bands"
+              data={technicalData}
+              dataKey="rsi"
+              color="#f59e0b"
+              value={latestTechnical?.rsi != null ? latestTechnical.rsi.toFixed(1) : "—"}
+              formatter={(value) => value.toFixed(1)}
+            />
+            <MiniLineCard
+              title="MACD"
+              subtitle="12 / 26 / 9 momentum"
+              data={technicalData}
+              dataKey="macd"
+              color="#22d3ee"
+              value={latestTechnical?.macd != null ? latestTechnical.macd.toFixed(2) : "—"}
+            />
+            <MiniLineCard
+              title="20D Momentum"
+              subtitle="Rate of change"
+              data={technicalData}
+              dataKey="roc20"
+              color="#a78bfa"
+              value={latestTechnical?.roc20 != null ? `${latestTechnical.roc20 >= 0 ? "+" : ""}${latestTechnical.roc20.toFixed(2)}%` : "—"}
+              formatter={(value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`}
+            />
+            <MiniLineCard
+              title="EMA 20"
+              subtitle="Short-term trend"
+              data={technicalData}
+              dataKey="ema20"
+              color="#22c55e"
+              value={latestTechnical?.ema20 != null ? formatPrice(latestTechnical.ema20) : "—"}
+              formatter={(value) => formatPrice(value)}
+            />
+            <MiniLineCard
+              title="Volatility"
+              subtitle="20D standard deviation"
+              data={technicalData}
+              dataKey="volatility"
+              color="#fb7185"
+              value={latestTechnical?.volatility != null ? `${latestTechnical.volatility.toFixed(2)}%` : "—"}
+              formatter={(value) => `${value.toFixed(2)}%`}
+            />
+            <MiniLineCard
+              title="Volume"
+              subtitle="Daily traded volume"
+              data={technicalData}
+              dataKey="volume"
+              color="#60a5fa"
+              value={latestTechnical ? formatVolume(latestTechnical.volume) : "—"}
+              formatter={(value) => formatVolume(value)}
+              bar
+            />
+          </div>
         </div>
       )}
 

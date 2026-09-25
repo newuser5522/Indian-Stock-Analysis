@@ -8,16 +8,16 @@ export const dynamic = "force-dynamic";
 const LIQUID_SYMBOLS = NSE_STOCKS.slice(0, 50).map((s) => s.symbol);
 
 export async function GET() {
-  return cache.getOrSet(
+  const active = await cache.getOrSet(
     "market:most-active",
     async () => {
       const quotes = await fetchQuotes(LIQUID_SYMBOLS);
-      const active = quotes
+      return quotes
         .filter((q) => (q.regularMarketVolume ?? 0) > 0)
         .sort((a, b) => (b.regularMarketVolume ?? 0) - (a.regularMarketVolume ?? 0))
         .slice(0, 10);
-      return NextResponse.json(active);
     },
     120_000
   );
+  return NextResponse.json(active);
 }

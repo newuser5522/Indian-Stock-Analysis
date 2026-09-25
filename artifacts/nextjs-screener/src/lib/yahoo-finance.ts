@@ -145,7 +145,8 @@ interface ChartMeta {
 
 async function fetchChartMeta(symbol: string): Promise<YFQuote | null> {
   try {
-    const url = `${YF_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    const isIndex = symbol.startsWith("^");
+    const url = `${YF_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${isIndex ? "1m" : "1d"}&range=${isIndex ? "1d" : "5d"}`;
     const data = (await yfFetch(url)) as {
       chart?: {
         result?: {
@@ -427,6 +428,93 @@ export async function fetchSummary(symbol: string): Promise<YFSummary> {
 
   try {
     return await fetchQuoteFallback();
+  } catch {
+    return {};
+  }
+}
+
+export interface YFFinancialRatios {
+  returnOnEquity?: number;
+  returnOnAssets?: number;
+  currentRatio?: number;
+  quickRatio?: number;
+}
+
+type TimeseriesPoint = {
+  reportedValue?: { raw?: number };
+};
+
+type TimeseriesResult = Record<string, TimeseriesPoint[] | undefined>;
+
+function latestTimeseriesValue(
+  result: TimeseriesResult | undefined,
+  key: string,
+): number | undefined {
+  const points = result?.[key];
+  if (!points?.length) return undefined;
+  return points
+    .slice()
+    .reverse()
+    .map((point) => point.reportedValue?.raw)
+    .find((value): value is number => typeof value === "number");
+}
+
+export async function fetchFinancialRatios(
+  symbol: string,
+): Promise<YFFinancialRatios> {
+  const types = [
+    "annualCurrentAssets",
+    "annualCurrentLiabilities",
+    "annualTotalAssets",
+    "annualStockholdersEquity",
+    "annualNetIncomeCommonStockholders",
+  ];
+  const period2 = Math.floor(Date.now() / 1000) + 86_400;
+  const period1 = period2 - 4 * 365 * 86_400;
+
+  try {
+    const entries = await Promise.all(
+      types.map(async (type) => {
+        const url =
+          `${YF_BASE}/ws/fundamentals-timeseries/v1/finance/timeseries/` +
+          `${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}` +
+          `&type=${type}&period1=${period1}&period2=${period2}`;
+        const data = (await yfFetch(url)) as {
+          timeseries?: { result?: TimeseriesResult[] | null };
+        };
+        return [type, data.timeseries?.result?.[0]?.[type]] as const;
+      }),
+    );
+    const result = Object.fromEntries(entries) as TimeseriesResult;
+
+    const currentAssets = latestTimeseriesValue(result, "annualCurrentAssets");
+    const currentLiabilities = latestTimeseriesValue(
+      result,
+      "annualCurrentLiabilities",
+    );
+    const totalAssets = latestTimeseriesValue(result, "annualTotalAssets");
+    const equity = latestTimeseriesValue(result, "annualStockholdersEquity");
+    const netIncome = latestTimeseriesValue(
+      result,
+      "annualNetIncomeCommonStockholders",
+    );
+
+    return {
+      currentRatio:
+        currentAssets != null &&
+        currentLiabilities != null &&
+        currentLiabilities !== 0
+          ? currentAssets / currentLiabilities
+          : undefined,
+      returnOnAssets:
+        netIncome != null && totalAssets != null && totalAssets !== 0
+          ? netIncome / totalAssets
+          : undefined,
+      returnOnEquity:
+        netIncome != null && equity != null && equity !== 0
+          ? netIncome / equity
+          : undefined,
+    };
   } catch {
     return {};
   }

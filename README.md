@@ -17,13 +17,11 @@ A personal-use, full-stack **Indian stock market screener and analytics dashboar
 forex, and FII/DII institutional flows. Built with Next.js 15 App Router, PostgreSQL,
 and free Yahoo Finance / NSE India data sources — no paid API keys, no login/auth.
 
-Two artifacts exist in this workspace:
+The workspace contains one product artifact:
 
-- **`artifacts/nextjs-screener`** — the primary, actively developed app (path `/nextjs/`, port 24507).
-- **`artifacts/api-server`** — a legacy Express API (path `/api/`, port 8080) kept running
-  but superseded by Next.js API routes. Not the focus of new work.
-- **`artifacts/stock-screener`** — an earlier/parallel screener artifact, largely superseded
-  by `nextjs-screener`.
+- **`artifacts/nextjs-screener`** — the actively developed app mounted at `/` on port 24507.
+
+The canvas preview service is infrastructure for visual mockups and is not a second product app.
 
 ---
 
@@ -146,10 +144,9 @@ re-investigating them:
 
 ## 4. Architecture decisions worth knowing
 
-- **Next.js basePath `/nextjs`**: avoids path collision with the legacy Express API
-  at `/api`. All client fetches must go through `apiUrl('/...')`
-  (`src/lib/api-url.ts`), which prepends `NEXT_PUBLIC_BASE_PATH`. Never hardcode
-  `/api/...` on the client — it will route to the wrong service through the shared proxy.
+- **Next.js root mount**: the app owns `/` and its internal API routes own `/api`. All
+  client fetches must go through `apiUrl('/...')` (`src/lib/api-url.ts`) so the artifact
+  remains path-aware without relying on a separate API service.
 - **Server-side caching over client caching**: because Yahoo/NSE endpoints are slow
   and can rate-limit, the TTL cache lives server-side (`cache.getOrSet(key, fn, ttlMs)`)
   so every user benefits from one shared fetch, not one per browser tab.
@@ -188,10 +185,10 @@ Not started yet — flagged here as a backlog for future sessions:
 pnpm run typecheck
 
 # 2. Confirm key API routes respond
-curl -s localhost:80/nextjs/api/market/overview
-curl -s localhost:80/nextjs/api/market/gold-etf
-curl -s localhost:80/nextjs/api/market/fii-dii
-curl -s localhost:80/nextjs/api/screener/advanced
+curl -s localhost:80/api/market/overview
+curl -s localhost:80/api/market/gold-etf
+curl -s localhost:80/api/market/fii-dii
+curl -s localhost:80/api/screener/advanced
 
 # 3. Visually check pages via the screenshot tool for:
 #    /, /screener, /stock/RELIANCE, /watchlist, /sectors,

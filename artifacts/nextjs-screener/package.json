@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS=--max-http-header-size=1000000 next dev --port 24507",
+    "dev": "NODE_OPTIONS=--max-http-header-size=1000000 next dev --port ${PORT:-24507}",
     "build": "next build",
-    "start": "cross-env NODE_OPTIONS=--max-http-header-size=1000000 next start --port 24507",
+    "start": "NODE_OPTIONS=--max-http-header-size=1000000 next start --port ${PORT:-24507}",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -38,7 +38,6 @@
     "@radix-ui/react-tooltip": "^1.2.11",
     "@tanstack/react-query": "catalog:",
     "@workspace/db": "workspace:*",
-    "cross-env": "^7.0.3",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "^1.1.1",
@@ -46,7 +45,7 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "catalog:",
-    "next": "^16.3.0",
+    "next": "^15.3.2",
     "next-themes": "^0.4.6",
     "react": "catalog:",
     "react-day-picker": "^9.14.0",
