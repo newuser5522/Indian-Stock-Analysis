@@ -129,6 +129,12 @@ export interface YFQuote {
   returnOnEquity?: number;
 }
 
+const indianEquityQuotesCache = new Map<
+  string,
+  { expiresAt: number; quotes: YFQuote[] }
+>();
+const indianEquityQuotesRequests = new Map<string, Promise<YFQuote[]>>();
+
 interface ChartMeta {
   symbol?: string;
   exchangeName?: string;
@@ -206,6 +212,133 @@ export async function fetchQuotes(symbols: string[]): Promise<YFQuote[]> {
     }
   }
   return results;
+}
+
+export async function fetchIndianEquityScreenerQuotes(
+  exchange: "NSE" | "BSE" = "NSE",
+): Promise<YFQuote[]> {
+  const cached = indianEquityQuotesCache.get(exchange);
+  if (cached && cached.expiresAt > Date.now()) return cached.quotes;
+  const pending = indianEquityQuotesRequests.get(exchange);
+  if (pending) return pending;
+
+  const request = loadIndianEquityScreenerQuotes(exchange);
+  indianEquityQuotesRequests.set(exchange, request);
+  try {
+    const quotes = await request;
+    indianEquityQuotesCache.set(exchange, {
+      quotes,
+      expiresAt: Date.now() + 15 * 60 * 1000,
+    });
+    return quotes;
+  } finally {
+    indianEquityQuotesRequests.delete(exchange);
+  }
+}
+
+async function loadIndianEquityScreenerQuotes(
+  exchange: "NSE" | "BSE",
+): Promise<YFQuote[]> {
+  const auth = await getYFCrumb();
+  if (!auth) throw new Error("Unable to authenticate Yahoo Finance screener");
+  const { crumb, cookie } = auth;
+
+  const fields = [
+    "symbol",
+    "shortName",
+    "longName",
+    "sector",
+    "industry",
+    "regularMarketPrice",
+    "regularMarketChange",
+    "regularMarketChangePercent",
+    "regularMarketPreviousClose",
+    "marketCap",
+    "regularMarketVolume",
+    "trailingPE",
+    "forwardPE",
+    "trailingEps",
+    "priceToBook",
+    "dividendYield",
+    "returnOnEquity",
+    "fiftyTwoWeekHigh",
+    "fiftyTwoWeekLow",
+  ].join(",");
+  const url = `${YF_BASE2}/v1/finance/screener?formatted=false&lang=en-US&region=IN&crumb=${encodeURIComponent(crumb)}&fields=${encodeURIComponent(fields)}`;
+  const batchSize = 250;
+
+  async function fetchPage(offset: number): Promise<{
+    total: number;
+    quotes: YFQuote[];
+  }> {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...HEADERS,
+        Cookie: cookie,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        size: batchSize,
+        offset,
+        sortField: "intradaymarketcap",
+        sortType: "DESC",
+        quoteType: "EQUITY",
+        query: {
+          operator: "and",
+          operands: [
+            { operator: "eq", operands: ["region", "in"] },
+            { operator: "eq", operands: ["exchange", exchange === "NSE" ? "NSI" : "BSE"] },
+          ],
+        },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      throw new Error(`Yahoo screener failed with status ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      finance?: {
+        result?: { total?: number; quotes?: YFQuote[] }[];
+        error?: { description?: string };
+      };
+    };
+    const result = payload.finance?.result?.[0];
+    if (!result || !Array.isArray(result.quotes)) {
+      throw new Error(
+        payload.finance?.error?.description ??
+          `Yahoo screener returned invalid data for offset ${offset}`,
+      );
+    }
+
+    return { total: result.total ?? result.quotes.length, quotes: result.quotes };
+  }
+
+  const firstPage = await fetchPage(0);
+  const offsets = Array.from(
+    { length: Math.ceil(firstPage.total / batchSize) - 1 },
+    (_, index) => (index + 1) * batchSize,
+  );
+  const pages: { total: number; quotes: YFQuote[] }[] = [];
+
+  for (let index = 0; index < offsets.length; index += 5) {
+    pages.push(...(await Promise.all(offsets.slice(index, index + 5).map(fetchPage))));
+  }
+
+  const quotes = [firstPage, ...pages].flatMap((page) => page.quotes);
+  const uniqueQuotes = new Map(
+    quotes
+      .filter((quote) =>
+        exchange === "NSE" ? /\.(NS)$/i.test(quote.symbol) : /\.(BO)$/i.test(quote.symbol),
+      )
+      .map((quote) => [quote.symbol, quote]),
+  );
+
+  if (uniqueQuotes.size === 0) {
+    throw new Error(`Yahoo screener returned no ${exchange} equity quotes`);
+  }
+  return [...uniqueQuotes.values()];
 }
 
 export interface YFSummary {
@@ -292,22 +425,13 @@ function buildYFCookieHeader(setCookieHeader: string | null): string {
     .join("; ");
 }
 
-async function getYFCrumb(
-  symbol?: string,
-): Promise<{ crumb: string; cookie: string } | null> {
+async function getYFCrumb(): Promise<{ crumb: string; cookie: string } | null> {
   if (_crumb && _cookies) return { crumb: _crumb, cookie: _cookies };
 
   try {
-    const pageUrl = symbol
-      ? `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`
-      : "https://finance.yahoo.com/";
-    const pageRes = await fetch(pageUrl, {
-      headers: {
-        ...HEADERS,
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      },
-      redirect: "follow",
+    const pageRes = await fetch("https://fc.yahoo.com/", {
+      headers: HEADERS,
+      redirect: "manual",
     });
     const setCookieHeader = pageRes.headers.get("set-cookie") ?? "";
     const cookieStr = buildYFCookieHeader(setCookieHeader);
@@ -341,7 +465,7 @@ export async function fetchSummary(symbol: string): Promise<YFSummary> {
   ].join(",");
 
   async function fetchQuoteFallback(): Promise<YFSummary> {
-    const auth = await getYFCrumb(symbol);
+    const auth = await getYFCrumb();
     const crumb = auth?.crumb;
     const cookie = auth?.cookie ?? "";
     const url = `${YF_BASE}/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&lang=en-US&region=IN${crumb ? `&crumb=${encodeURIComponent(crumb)}` : ""}`;
@@ -406,7 +530,7 @@ export async function fetchSummary(symbol: string): Promise<YFSummary> {
   }
 
   try {
-    const auth = await getYFCrumb(symbol);
+    const auth = await getYFCrumb();
     const crumb = auth?.crumb;
     const cookie = auth?.cookie ?? "";
     if (crumb) {
@@ -639,7 +763,7 @@ function financialTypeName(
   return `${periodType}${suffix}`;
 }
 
-async function fetchFinancialSeries(
+export async function fetchFinancialSeries(
   symbol: string,
   periodType: "annual" | "quarterly",
 ): Promise<FinancialSeriesPoint[]> {
@@ -932,6 +1056,67 @@ export async function fetchHistory(
     .filter((c) => c.close > 0);
 }
 
+export interface CorporateAction {
+  date: string;
+  type: "Dividend" | "Split";
+  description: string;
+  amount?: number;
+  ratio?: string;
+}
+
+export async function fetchCorporateActions(
+  symbol: string,
+): Promise<CorporateAction[]> {
+  const url = `${YF_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5y&events=div%2Csplits`;
+  const data = (await yfFetch(url)) as {
+    chart?: {
+      result?: {
+        events?: {
+          dividends?: Record<string, { date?: number; amount?: number }>;
+          splits?: Record<
+            string,
+            { date?: number; numerator?: number; denominator?: number; splitRatio?: string }
+          >;
+        };
+      }[];
+      error?: { description?: string };
+    };
+  };
+  const result = data.chart?.result?.[0];
+  if (!result) {
+    throw new Error(
+      data.chart?.error?.description ??
+        `Yahoo Finance returned no corporate-action data for ${symbol}`,
+    );
+  }
+
+  const actions: CorporateAction[] = [];
+  for (const dividend of Object.values(result.events?.dividends ?? {})) {
+    if (dividend.date == null || dividend.amount == null) continue;
+    actions.push({
+      date: new Date(dividend.date * 1000).toISOString().slice(0, 10),
+      type: "Dividend",
+      description: "Cash dividend",
+      amount: dividend.amount,
+    });
+  }
+  for (const split of Object.values(result.events?.splits ?? {})) {
+    if (split.date == null) continue;
+    const ratio =
+      split.splitRatio ??
+      (split.numerator != null && split.denominator != null
+        ? `${split.numerator}:${split.denominator}`
+        : undefined);
+    actions.push({
+      date: new Date(split.date * 1000).toISOString().slice(0, 10),
+      type: "Split",
+      description: ratio ? `Stock split ${ratio}` : "Stock split",
+      ratio,
+    });
+  }
+  return actions.sort((a, b) => b.date.localeCompare(a.date));
+}
+
 export async function searchYahoo(
   query: string,
   count = 50,
@@ -974,32 +1159,82 @@ export interface YFNewsItem {
 }
 
 export async function fetchMarketNews(count = 25): Promise<YFNewsItem[]> {
-  try {
-    // Fetch news via search for broad Indian market terms
-    const queries = ["NIFTY India stocks", "BSE NSE market", "Indian stocks"];
-    const allNews: YFNewsItem[] = [];
-    const seen = new Set<string>();
-    for (const q of queries) {
-      try {
-        const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=IN&quotesCount=0&newsCount=15&enableFuzzyQuery=false`;
-        const data = (await yfFetch(url)) as { news?: YFNewsItem[] };
-        for (const n of data?.news ?? []) {
-          if (!seen.has(n.uuid)) {
-            seen.add(n.uuid);
-            allNews.push(n);
-          }
+  const queries = ["NIFTY India stocks", "BSE NSE market", "Indian stocks"];
+  const allNews: YFNewsItem[] = [];
+  const seen = new Set<string>();
+  for (const q of queries) {
+    try {
+      const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(q)}&lang=en-US&region=IN&quotesCount=0&newsCount=15&enableFuzzyQuery=false`;
+      const data = (await yfFetch(url)) as { news?: YFNewsItem[] };
+      for (const newsItem of data?.news ?? []) {
+        if (!seen.has(newsItem.uuid)) {
+          seen.add(newsItem.uuid);
+          allNews.push(newsItem);
         }
-        if (allNews.length >= count) break;
-      } catch {
-        /* skip query */
       }
+      if (allNews.length >= count) break;
+    } catch {
+      // Try the next query and use the RSS source if Yahoo is unavailable.
     }
+  }
+  if (allNews.length > 0) {
     return allNews
       .slice(0, count)
       .sort((a, b) => b.providerPublishTime - a.providerPublishTime);
-  } catch {
-    return [];
   }
+
+  const feedUrl =
+    "https://news.google.com/rss/search?q=" +
+    `${encodeURIComponent("Indian stock market NIFTY NSE BSE")}&hl=en-IN&gl=IN&ceid=IN:en`;
+  const response = await fetch(feedUrl, {
+    headers: { "User-Agent": HEADERS["User-Agent"] },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Market news feed failed: HTTP ${response.status}`);
+  }
+
+  const xml = await response.text();
+  const decodeXml = (value: string) =>
+    value
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+      .replace(/&#x([0-9a-f]+);/gi, (_, code: string) =>
+        String.fromCodePoint(parseInt(code, 16)),
+      )
+      .replace(/&#(\d+);/g, (_, code: string) =>
+        String.fromCodePoint(parseInt(code, 10)),
+      )
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+  const tagValue = (item: string, tag: string) => {
+    const match = item.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
+    return match ? decodeXml(match[1].trim()) : "";
+  };
+
+  const rssNews = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)]
+    .map(([, item]) => {
+      const title = tagValue(item, "title");
+      const link = tagValue(item, "link");
+      const timestamp = Date.parse(tagValue(item, "pubDate"));
+      return {
+        uuid: tagValue(item, "guid") || link,
+        title,
+        publisher: tagValue(item, "source") || "Google News",
+        link,
+        providerPublishTime: Number.isFinite(timestamp)
+          ? Math.floor(timestamp / 1000)
+          : 0,
+        type: "news",
+      };
+    })
+    .filter((item) => item.uuid && item.title && item.link);
+
+  return rssNews
+    .sort((a, b) => b.providerPublishTime - a.providerPublishTime)
+    .slice(0, count);
 }
 
 export async function fetchStockNews(

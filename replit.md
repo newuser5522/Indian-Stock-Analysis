@@ -10,6 +10,59 @@ A full-stack Next.js 15 App Router app for Indian stock market analytics. Covers
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
 
+### Deploy to Netlify
+
+Connect the repository to Netlify with the repository root as the base directory.
+The root `netlify.toml` builds the Next.js screener workspace and enables Netlify's
+Next.js runtime for its server-rendered pages and API routes. Do not set the base
+directory to `artifacts/nextjs-screener`; the app depends on workspace packages at
+the repository root.
+
+Set `DATABASE_URL` in Netlify's production environment to a reachable, persistent
+PostgreSQL database, then apply the Drizzle schema with
+`pnpm --filter @workspace/db run push` using that database URL. The local
+`.env.local` file and local development database are not deployed to Netlify.
+
+### Configure PostgreSQL for Watchlist and Portfolio
+
+The watchlist and portfolio are stored in PostgreSQL. Create a PostgreSQL database,
+then set `DATABASE_URL` in the environment used to start the Next.js server. Do not
+commit the connection string to source control.
+
+On Windows PowerShell, set the connection string in the same terminal used to run
+the schema push and app:
+
+```powershell
+$env:DATABASE_URL = "postgresql://USERNAME:PASSWORD@localhost:5432/fintrack"
+pnpm --filter @workspace/db run push
+pnpm --filter @workspace/nextjs-screener run dev
+```
+
+Replace `USERNAME` and `PASSWORD` with a PostgreSQL role that can create tables,
+and create the `fintrack` database first. For a hosted database, use the provider's
+connection string, including any required SSL options. The database must be
+reachable before running `push`; it creates or updates the tables defined by the
+Drizzle schema. For deployments, configure `DATABASE_URL` in the hosting provider's
+server environment and run the schema push as a deployment step. Watchlist and
+Portfolio APIs return HTTP 503 when the variable is missing.
+
+For this Windows development environment, a local PostgreSQL cluster is provisioned
+under `%LOCALAPPDATA%\FinTrack\postgres-data`, bound to `127.0.0.1:5433`. Its
+connection string is stored in the ignored
+`artifacts/nextjs-screener/.env.local`; the Drizzle schema has already been pushed.
+After a machine restart, start the database before the app if it is not already
+running:
+
+```powershell
+$pgctl = "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe"
+& $pgctl -D "$env:LOCALAPPDATA\FinTrack\postgres-data" status
+& $pgctl -D "$env:LOCALAPPDATA\FinTrack\postgres-data" -l "$env:LOCALAPPDATA\FinTrack\postgres.log" start
+pnpm --filter @workspace/nextjs-screener run dev
+```
+
+The database uses a separate cluster and port from any PostgreSQL service already
+installed on the machine.
+
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
@@ -81,12 +134,13 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 ## Architecture decisions
 
 - **Next.js at the root path**: the app owns `/` and its internal API routes own `/api`. Client fetches use `apiUrl('/...')` so this remains safe if the artifact is mounted under another path later.
-- **Server-side caching**: In-memory TTL cache (`src/lib/cache.ts`) per Next.js process. Market data: 60s TTL, fundamentals: 5min TTL, screener quotes: 2min TTL.
+- **Server-side caching**: In-memory TTL cache (`src/lib/cache.ts`) per Next.js process, with identical concurrent cache misses coalesced into one upstream request. Market data has route-specific TTLs; global markets cache for 5min.
+- **EOD data**: Daily stock history, corporate actions, and index analytics are cached for 12 hours per process. This reduces repeated requests but is not durable storage across restarts.
 - **Yahoo Finance**: Uses chart API v8 (no auth required) for quotes/history. Uses quoteSummary v10 with crumb for fundamentals, falling back to a crumbless `v7/finance/quote` call (`fetchQuoteFallback` in `yahoo-finance.ts`) if the crumb/session fails.
 - **NSE India session**: `src/lib/nse.ts` establishes a cookie session by first hitting the NSE homepage (stores cookies), waits 350ms, then fires the API call. All NSE-specific routes use `fetchNseApi<T>(path)` from this helper.
-- **NSE mock fallbacks**: Every NSE-specific API route (bulk deals, corporate filings, promoter activity, quarterly results, futures dashboard) has a hardcoded mock fallback that fires when the live NSE call fails or returns no data — so the UI always renders.
+- **Market-data failures**: Market routes do not fabricate replacement records. When Yahoo Finance or NSE data is unavailable, the route returns an error and its page displays an unavailable state.
 - **API response caching**: Cache plain data objects, not `NextResponse` instances. Each request creates a fresh JSON response so cached response bodies remain readable.
-- **Screener search**: `api/screener/route.ts` falls back to the full `NSE_STOCKS` static list when no search query is provided (fixes blank Screener and Scans pages).
+- **Screener coverage**: The stock screener uses Yahoo Finance's NSE/BSE equity listings and warns when an exchange source fails; scans, market breadth, and market movers use live NSE data rather than a bundled sample list.
 - **Fundamentals fallback chain**: `api/stocks/fundamentals/[symbol]/route.ts` merges `fetchSummary` (quoteSummary), `fetchQuotes`, and `fetchNseData` (NSE India quote-equity API) results, since any one source can be missing fields or blocked.
 - **RSI(14)**: Computed client-side from OHLCV history data in the stock detail page.
 - **DB imports in API routes**: `@workspace/db` is a workspace package imported directly into Next.js API routes — no need for a separate Express layer.
@@ -95,20 +149,21 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 
 ### Markets
 - **Market Overview**: Live Nifty 50, Sensex, Bank Nifty, IT, Auto, Pharma index cards; top gainers/losers/most-active
-- **Sectors**: Sector performance heatmap with 1D/1W/1M/3M view
+- **Sectors**: Industry heatmap with ascending/descending 1D/1W/1M/3M growth sorting, recent 5D and 14D-vs-66D performance matrix, and sector indices
 - **FII/DII**: Foreign and domestic institutional flow data
 - **Forex**: USD-INR and major currency pairs
 - **Gold ETFs**: Sovereign gold bond and ETF tracker
 - **Bulk Deals**: Institutional buy/sell reports with date range filter and BUY/SELL badges
 
 ### Screener
-- **Stock Screener**: Filter 109+ NSE stocks by exchange, sector, P/E, P/B, market cap; sort by any metric
+- **Stock Screener**: Filter NSE/BSE listings by exchange, sector, P/E, P/B, market cap; missing valuation fields do not exclude stocks
 - **Query Screener**: Custom formula-based screener
 - **Scans**: Pre-built scans (52W high/low breakouts, RSI overbought/oversold, volume surges, etc.)
 
 ### Analytics
 - **Market Breadth**: Live A/D ratio, Nifty EMA 20/50/200 participation, 52-week range counts, top movers
 - **Industry Rotation**: RRG (Relative Rotation Graph) scatter chart + sector table with quadrant classification (Leading/Weakening/Lagging/Improving)
+- **Index Analytics**: Daily close, 1M/3M/6M/1Y/5Y returns, five-year range, and maximum drawdown for six benchmarks
 - **Futures Dashboard**: Nifty & BankNifty option chain — OI profile bar chart, PCR, max pain strike, ATM straddle, per-strike OI table
 
 ### Research
@@ -117,7 +172,7 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 - **Quarterly Results**: Revenue, profit, EPS with YoY growth and Beat/Miss/Inline classification
 
 ### Portfolio & Tools
-- **Stock Detail**: Live price, OHLCV stats, 52-week range, price chart with period selector, RSI(14) chart, full fundamentals panel with analyst consensus
+- **Stock Detail**: Live price, OHLCV stats, five years of daily chart history, dividend/split history, 52-week range, RSI(14), and fundamentals
 - **Watchlist**: PostgreSQL-backed; search + add stocks, remove stocks, live price updates
 - **Portfolio**: Holdings tracker with P&L
 - **Alerts**: Price alerts (localStorage-backed, browser-side polling)

@@ -18,6 +18,12 @@ import {
 import { isFno } from "@/lib/fno-stocks";
 import { toast } from "sonner";
 import {
+  addWatchlistItem,
+  getWatchlist,
+  removeWatchlistItem,
+  type WatchlistItem,
+} from "@/lib/watchlist-api";
+import {
   INSIGHT_TABS,
   StockInsightsDashboard,
   type BulkDeal,
@@ -50,8 +56,14 @@ interface HistoryRow {
   date: string; timestamp: number; open: number; high: number; low: number; close: number;
   volume: number; change1d: number; change5d: number | null; change22d: number | null; change66d: number | null; rsi: number | null;
 }
+interface CorporateAction {
+  date: string;
+  type: "Dividend" | "Split";
+  description: string;
+  amount?: number;
+  ratio?: string;
+}
 interface NewsItem { uuid: string; title: string; publisher: string; link: string; providerPublishTime: number; relatedTickers?: string[] }
-interface WatchlistItem { symbol: string }
 interface Filing { title: string; date: string; type: string; category: string; url?: string }
 interface TechnicalPoint {
   date: string;
@@ -74,7 +86,7 @@ const PERIODS = [
   { label: "3M", value: "3mo", interval: "1d" },
   { label: "6M", value: "6mo", interval: "1d" },
   { label: "1Y", value: "1y", interval: "1d" },
-  { label: "5Y", value: "5y", interval: "1wk" },
+  { label: "5Y", value: "5y", interval: "1d" },
 ];
 const TECHNICAL_VIEWS = ["Charts", "Volume & Delivery", "Price History"] as const;
 type TechnicalView = (typeof TECHNICAL_VIEWS)[number];
@@ -124,6 +136,14 @@ function timeAgo(ts: number): string {
 function pctCell(v: number | null): string {
   if (v == null) return "—";
   return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+}
+
+async function fetchStockData<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Stock data unavailable (HTTP ${response.status})`);
+  }
+  return response.json();
 }
 
 function computeTechnicalData(
@@ -311,7 +331,7 @@ export default function StockPage() {
     isError: insightsError,
   } = useQuery<StockInsights>({
     queryKey: ["stock", "insights", rawSymbol],
-    queryFn: () => fetch(apiUrl(`/stocks/insights/${encodeURIComponent(rawSymbol)}`)).then(r => r.json()),
+    queryFn: () => fetchStockData(apiUrl(`/stocks/insights/${encodeURIComponent(rawSymbol)}`)),
     enabled: !!rawSymbol,
     staleTime: 5 * 60 * 1000,
   });
@@ -339,31 +359,46 @@ export default function StockPage() {
     enabled: !!rawSymbol && activeTab === "Filings",
     staleTime: 5 * 60 * 1000,
   });
+  const {
+    data: corporateActions,
+    isLoading: corporateActionsLoading,
+    isError: corporateActionsError,
+  } = useQuery<{ symbol: string; actions: CorporateAction[] }>({
+    queryKey: ["stock", "corporate-actions", rawSymbol],
+    queryFn: () =>
+      fetchStockData(
+        apiUrl(`/stocks/corporate-actions/${encodeURIComponent(rawSymbol)}`),
+      ),
+    enabled: !!rawSymbol && activeTab === "Corporate Actions",
+    staleTime: 12 * 60 * 60 * 1000,
+  });
   const { data: ownership } = useQuery<OwnershipData>({
     queryKey: ["stock", "ownership", rawSymbol],
-    queryFn: () => fetch(apiUrl(`/stocks/ownership/${encodeURIComponent(rawSymbol)}`)).then(r => r.json()),
+    queryFn: () => fetchStockData(apiUrl(`/stocks/ownership/${encodeURIComponent(rawSymbol)}`)),
     enabled: !!rawSymbol && (activeTab === "Shareholding" || activeTab === "Promoter Activity"),
     staleTime: 10 * 60 * 1000,
   });
-  const { data: bulkDeals = [], isLoading: bulkDealsLoading } = useQuery<BulkDeal[]>({
+  const { data: bulkDeals = [], isLoading: bulkDealsLoading, isError: bulkDealsError } = useQuery<BulkDeal[]>({
     queryKey: ["stock", "bulk-deals", rawSymbol],
-    queryFn: () => fetch(apiUrl(`/stocks/bulk-deals/${encodeURIComponent(rawSymbol)}`)).then(r => r.json()),
+    queryFn: () => fetchStockData(apiUrl(`/stocks/bulk-deals/${encodeURIComponent(rawSymbol)}`)),
     enabled: !!rawSymbol && activeTab === "Bulk Deal",
     staleTime: 5 * 60 * 1000,
   });
-  const { data: watchlist } = useQuery<WatchlistItem[]>({
+  const { data: watchlist, isError: watchlistError } = useQuery<WatchlistItem[]>({
     queryKey: ["watchlist"],
-    queryFn: () => fetch(apiUrl("/watchlist")).then(r => r.json()),
+    queryFn: getWatchlist,
   });
 
   const isWatched = (watchlist ?? []).some(w => w.symbol === rawSymbol);
   const addMutation = useMutation({
-    mutationFn: () => fetch(apiUrl("/watchlist"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: rawSymbol }) }),
+    mutationFn: () => addWatchlistItem(rawSymbol),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["watchlist"] }); toast.success("Added to watchlist"); },
+    onError: (error: Error) => toast.error(error.message),
   });
   const removeMutation = useMutation({
-    mutationFn: () => fetch(apiUrl(`/watchlist/${encodeURIComponent(rawSymbol)}`), { method: "DELETE" }),
+    mutationFn: () => removeWatchlistItem(rawSymbol),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["watchlist"] }); toast.success("Removed"); },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   /* Chart data */
@@ -403,7 +438,7 @@ export default function StockPage() {
   const rangePct = high52 > low52 ? ((price - low52) / (high52 - low52)) * 100 : 50;
 
   return (
-    <div className="stock-detail-page space-y-5 max-w-screen-xl">
+    <div className="stock-detail-page space-y-5 max-w-7xl">
       {/* Back */}
       <Link href="/screener" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
         <ArrowLeft className="h-3.5 w-3.5" />Back to Screener
@@ -434,6 +469,7 @@ export default function StockPage() {
             {isWatched ? <StarOff className="h-4 w-4" /> : <Star className="h-4 w-4" />}
             {isWatched ? "Unwatch" : "Watchlist"}
           </Button>
+          {watchlistError && <span className="text-xs text-destructive">Watchlist unavailable</span>}
         </div>
       </div>
 
@@ -466,7 +502,7 @@ export default function StockPage() {
           )}
         </div>
         <div className="stock-stats-card rounded-lg border bg-card p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Today's Stats</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Today&apos;s Stats</h3>
           <StatRow label="Open" value={formatPrice(quote?.regularMarketOpen)} />
           <StatRow label="Prev Close" value={formatPrice(quote?.regularMarketPreviousClose)} />
           <StatRow label="High" value={formatPrice(quote?.regularMarketDayHigh)} />
@@ -497,7 +533,9 @@ export default function StockPage() {
         </div>
       </div>
 
-      {activeTab !== "Technicals" && activeTab !== "Filings" && (
+      {activeTab !== "Technicals" &&
+        activeTab !== "Filings" &&
+        activeTab !== "Corporate Actions" && (
         <StockInsightsDashboard
           tab={activeTab}
           insights={insights}
@@ -507,6 +545,7 @@ export default function StockPage() {
           ownership={ownership}
           bulkDeals={bulkDeals}
           bulkDealsLoading={bulkDealsLoading}
+          bulkDealsError={bulkDealsError}
           symbol={rawSymbol}
         />
       )}
@@ -527,6 +566,57 @@ export default function StockPage() {
             </button>
           ))}
         </div>
+      )}
+
+      {activeTab === "Corporate Actions" && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold">Corporate Actions — {displaySymbol(rawSymbol)}</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Dividends and stock splits recorded over the last five years · Yahoo Finance
+              </p>
+            </div>
+          </div>
+          {corporateActionsLoading ? (
+            <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading corporate actions…
+            </div>
+          ) : corporateActionsError ? (
+            <div role="alert" className="rounded-lg border border-amber-500/30 bg-card p-8 text-center text-sm text-amber-500">
+              Corporate action history is temporarily unavailable.
+            </div>
+          ) : (corporateActions?.actions ?? []).length === 0 ? (
+            <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
+              No dividend or split events were reported in this five-year period.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border bg-card">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Ex-date</th>
+                    <th className="px-4 py-3 font-medium">Action</th>
+                    <th className="px-4 py-3 font-medium text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corporateActions?.actions.map((action) => (
+                    <tr key={`${action.date}-${action.type}-${action.description}`} className="border-b last:border-0">
+                      <td className="px-4 py-3 tabular-nums">{action.date}</td>
+                      <td className="px-4 py-3">{action.type}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {action.type === "Dividend" && action.amount != null
+                          ? `₹${action.amount.toFixed(2)} per share`
+                          : action.description}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Technical charts */}

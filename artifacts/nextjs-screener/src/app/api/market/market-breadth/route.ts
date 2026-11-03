@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchQuotes, fetchHistory } from "@/lib/yahoo-finance";
-import { NSE_STOCKS } from "@/lib/stock-list";
+import { fetchIndianEquityScreenerQuotes, fetchHistory } from "@/lib/yahoo-finance";
 import { cache } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +15,14 @@ function computeEMA(values: number[], period: number): number[] {
 }
 
 async function computeMarketBreadth() {
-  const symbols = NSE_STOCKS.map((s) => s.symbol);
-
-  // Fetch live quotes + Nifty history in parallel
-  const [quotes, niftyHist] = await Promise.all([
-    fetchQuotes(symbols),
+  const [allQuotes, niftyHist] = await Promise.all([
+    fetchIndianEquityScreenerQuotes(),
     fetchHistory("^NSEI", "1y", "1d"),
   ]);
+  const quotes = allQuotes.filter((quote) => quote.regularMarketChangePercent != null);
+  if (quotes.length === 0 || niftyHist.length === 0) {
+    throw new Error("Market breadth source returned no quote or index history data");
+  }
 
   // Advance / Decline
   let advances = 0, declines = 0, unchanged = 0;
@@ -33,7 +33,7 @@ async function computeMarketBreadth() {
   const topLosers: { symbol: string; name: string; changePercent: number }[] = [];
 
   for (const q of quotes) {
-    const chg = q.regularMarketChangePercent ?? 0;
+    const chg = q.regularMarketChangePercent!;
     if (chg > 0) advances++;
     else if (chg < 0) declines++;
     else unchanged++;
@@ -41,21 +41,21 @@ async function computeMarketBreadth() {
     if (chg >= 3) strongUp++;
     if (chg <= -3) strongDown++;
 
-    const price = q.regularMarketPrice ?? 0;
-    const high52 = q.fiftyTwoWeekHigh ?? 0;
-    const low52 = q.fiftyTwoWeekLow ?? 0;
-    if (high52 > 0) {
+    const price = q.regularMarketPrice;
+    const high52 = q.fiftyTwoWeekHigh;
+    const low52 = q.fiftyTwoWeekLow;
+    if (price != null && high52 != null && high52 > 0) {
       const pctFromHigh = (price / high52) * 100;
       if (pctFromHigh >= 98) at52wHigh++;
       else if (pctFromHigh >= 95) near52wHigh++;
     }
-    if (low52 > 0) {
+    if (price != null && low52 != null && low52 > 0) {
       const pctFromLow = (price / low52) * 100;
       if (pctFromLow <= 102) at52wLow++;
       else if (pctFromLow <= 110) near52wLow++;
     }
 
-    const nameStr = NSE_STOCKS.find((s) => s.symbol === q.symbol)?.name ?? q.symbol;
+    const nameStr = q.longName ?? q.shortName ?? q.symbol;
     if (chg >= 3) topGainers.push({ symbol: q.symbol, name: nameStr, changePercent: chg });
     if (chg <= -3) topLosers.push({ symbol: q.symbol, name: nameStr, changePercent: chg });
   }
@@ -112,13 +112,11 @@ export async function GET() {
   try {
     const data = await cache.getOrSet("market:market-breadth", computeMarketBreadth, 3 * 60 * 1000);
     return NextResponse.json(data);
-  } catch {
-    return NextResponse.json({
-      total: 100,
-      advanceDecline: { advances: 55, declines: 40, unchanged: 5, ratio: 1.38 },
-      fiftyTwoWeek: { at52wHigh: 8, near52wHigh: 14, near52wLow: 3, at52wLow: 1 },
-      momentum: { strongUp: 12, strongDown: 8, topGainers: [], topLosers: [] },
-      niftyEma: { price: 23767, ema20: 23500, ema50: 23200, ema200: 22000, aboveEma20: true, aboveEma50: true, aboveEma200: true },
-    });
+  } catch (error) {
+    console.error("Market breadth is unavailable", error);
+    return NextResponse.json(
+      { error: "Market breadth data is temporarily unavailable" },
+      { status: 502 },
+    );
   }
 }
