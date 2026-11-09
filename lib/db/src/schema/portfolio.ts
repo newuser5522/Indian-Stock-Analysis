@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -7,8 +7,8 @@ export const portfolioTable = pgTable("portfolio", {
   symbol: text("symbol").notNull(),
   name: text("name").notNull().default(""),
   exchange: text("exchange").notNull().default("NSE"),
-  quantity: real("quantity").notNull(),
-  avgPrice: real("avg_price").notNull(),
+  quantity: doublePrecision("quantity").notNull(),
+  avgPrice: doublePrecision("avg_price").notNull(),
   purchaseDate: text("purchase_date"),
   notes: text("notes"),
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),

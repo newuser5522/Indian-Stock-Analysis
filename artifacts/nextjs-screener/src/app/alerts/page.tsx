@@ -54,17 +54,18 @@ function saveAlerts(alerts: Alert[]) {
 }
 
 function checkAlert(alert: Alert, quote: StockQuote): boolean {
-  const price = quote.regularMarketPrice ?? 0;
-  const pct = quote.regularMarketChangePercent ?? 0;
+  const price = quote.regularMarketPrice;
+  const pct = quote.regularMarketChangePercent;
+  if (price == null || !Number.isFinite(price) || price <= 0) return false;
   switch (alert.condition) {
     case "above":
       return price >= alert.value;
     case "below":
       return price <= alert.value;
     case "change_pct_above":
-      return pct >= alert.value;
+      return pct != null && Number.isFinite(pct) && pct >= alert.value;
     case "change_pct_below":
-      return pct <= alert.value;
+      return pct != null && Number.isFinite(pct) && pct <= alert.value;
     default:
       return false;
   }

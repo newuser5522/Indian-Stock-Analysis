@@ -336,9 +336,12 @@ export function buildPortfolioRisk(
       ? 1 / weights.reduce((sum, position) => sum + position.weight ** 2, 0)
       : null;
 
+  const sectorFor = (symbol: string) =>
+    sectorsBySymbol.get(symbol.replace(/\.(NS|BO)$/i, "").toUpperCase()) ??
+    "Unclassified";
   const sectorTotals = new Map<string, number>();
   for (const position of weights) {
-    const sector = sectorsBySymbol.get(position.symbol.toUpperCase()) ?? "Unclassified";
+    const sector = sectorFor(position.symbol);
     sectorTotals.set(sector, (sectorTotals.get(sector) ?? 0) + position.currentValue);
   }
 
@@ -361,7 +364,7 @@ export function buildPortfolioRisk(
       return {
         symbol: position.symbol,
         name: position.name,
-        sector: sectorsBySymbol.get(position.symbol.toUpperCase()) ?? "Unclassified",
+        sector: sectorFor(position.symbol),
         currentValue: position.currentValue,
         weightPct: position.weight * 100,
         quoteAvailable: position.quoteAvailable,

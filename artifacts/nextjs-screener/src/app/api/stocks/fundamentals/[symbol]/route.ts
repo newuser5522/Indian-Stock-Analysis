@@ -18,10 +18,11 @@ export async function GET(
   if (!symbol)
     return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
-  const cacheKey = `stock:fundamentals:${symbol}`;
-  const data = await cache.getOrSet(
-    cacheKey,
-    async () => {
+  try {
+    const cacheKey = `stock:fundamentals:${symbol}`;
+    const data = await cache.getOrSet(
+      cacheKey,
+      async () => {
       const normalizedSymbol = symbol.replace(/\.(NS|BO)$/i, "").toUpperCase();
       let canonicalSymbol = `${normalizedSymbol}.NS`;
 
@@ -109,9 +110,16 @@ export async function GET(
         fullTimeEmployees: summary.assetProfile?.fullTimeEmployees,
         website: summary.assetProfile?.website,
       };
-    },
-    300_000,
-  );
+      },
+      300_000,
+    );
 
-  return NextResponse.json(data);
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error(`Stock fundamentals are unavailable for ${symbol}`, error);
+    return NextResponse.json(
+      { error: "Stock fundamentals are temporarily unavailable" },
+      { status: 502 },
+    );
+  }
 }

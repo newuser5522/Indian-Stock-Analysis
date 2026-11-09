@@ -9,11 +9,11 @@ export async function GET(
   const { symbol } = await params;
   const requestedPage = Number(req.nextUrl.searchParams.get("page") ?? 0);
   const requestedDays = Number(req.nextUrl.searchParams.get("days") ?? 330);
-  const page =
-    Number.isSafeInteger(requestedPage) && requestedPage >= 0
-      ? requestedPage
-      : 0;
   const days = requestedDays === 195 ? 195 : 330;
+  const maxPage = Math.ceil(days / 20) - 1;
+  const page = Number.isSafeInteger(requestedPage)
+    ? Math.min(Math.max(0, requestedPage), maxPage)
+    : 0;
   try {
     const data = await cache.getOrSet(
       `stock:history-table:v3:${symbol}:${days}:${page}`,

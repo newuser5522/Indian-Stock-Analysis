@@ -47,13 +47,27 @@ export async function GET(
     );
   }
 
-  const cacheKey = `stock:history:${symbol}:${period}:${interval}`;
-  const data = await cache.getOrSet(
-    cacheKey,
-    () => fetchHistory(symbol, period, interval),
-    interval === "1d" || interval === "1wk" || interval === "1mo"
-      ? 12 * 60 * 60 * 1000
-      : 60_000,
-  );
-  return NextResponse.json(data);
+  try {
+    const cacheKey = `stock:history:${symbol}:${period}:${interval}`;
+    const data = await cache.getOrSet(
+      cacheKey,
+      () => fetchHistory(symbol, period, interval),
+      interval === "1d" || interval === "1wk" || interval === "1mo"
+        ? 12 * 60 * 60 * 1000
+        : 60_000,
+    );
+    if (data.length === 0) {
+      return NextResponse.json(
+        { error: "Historical stock data is temporarily unavailable" },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error(`Historical stock data is unavailable for ${symbol}`, error);
+    return NextResponse.json(
+      { error: "Historical stock data is temporarily unavailable" },
+      { status: 502 },
+    );
+  }
 }

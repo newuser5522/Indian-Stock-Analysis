@@ -15,13 +15,38 @@ This file is the **story**, not the reference sheet.
 A personal-use, full-stack **Indian stock market screener and analytics dashboard**
 ("FinTrack" — dark navy theme) covering NSE/BSE equities, indices, sectors, gold ETFs,
 forex, and FII/DII institutional flows. Built with Next.js 15 App Router, PostgreSQL,
-and free Yahoo Finance / NSE India data sources — no paid API keys, no login/auth.
+and free Yahoo Finance / NSE India data sources. The app uses a single-owner Auth.js
+login; it is not configured for multiple user accounts.
 
 The workspace contains one product artifact:
 
 - **`artifacts/nextjs-screener`** — the actively developed app mounted at `/` on port 24507.
 
 The canvas preview service is infrastructure for visual mockups and is not a second product app.
+
+### Private deployment setup
+
+The app is private by default. Configure these environment variables before starting it:
+
+- `AUTH_SECRET`: a randomly generated secret (for example, `openssl rand -base64 32`).
+- `AUTH_ADMIN_EMAIL` and `AUTH_ADMIN_PASSWORD`: the one owner's login credentials. Use a
+  unique password stored in the host's secret manager, not in source control.
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`: a shared Upstash Redis
+  database used for rate limiting in production. Local development uses a process-local
+  limiter when these values are absent; production API requests return `503` until both
+  values are configured.
+- `DATABASE_URL`: PostgreSQL connection string. Run
+  `pnpm --filter @workspace/db run push` when applying schema changes.
+- `DATABASE_SSL=true` when the database host requires verified TLS.
+- `DB_POOL_MAX`: optional database pool size (defaults to 5; maximum 50).
+
+The login protects the entire app and its API. This is intentionally a single-owner setup;
+do not share the owner credentials. If multiple people need separate portfolios/watchlists,
+add account provisioning and a user/owner column to both tables before enabling accounts.
+When using a reverse proxy that supplies `x-forwarded-for`, set `TRUST_PROXY=true` only if
+that proxy replaces the header rather than passing client-supplied values through. The
+limiter otherwise uses provider-specific client-IP headers and safely falls back to one
+shared `unknown` bucket.
 
 ---
 

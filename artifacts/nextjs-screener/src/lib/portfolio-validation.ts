@@ -32,13 +32,30 @@ function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+function isValidQuantity(value: unknown): value is number {
+  return isPositiveFiniteNumber(value) && value <= 1_000_000_000_000;
+}
+
+function isValidPrice(value: unknown): value is number {
+  return isPositiveFiniteNumber(value) && value <= 1_000_000_000;
+}
+
 function isValidPurchaseDate(value: unknown): value is string | null {
   if (value === null) return true;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
   const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    return false;
+  }
+  const todayInIndia = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return value <= todayInIndia;
 }
 
 function isOptionalText(
@@ -59,11 +76,11 @@ export function validatePortfolioInput(
   if (!isValidSymbol(input.symbol)) {
     return { error: "symbol must be a valid stock symbol" };
   }
-  if (!isPositiveFiniteNumber(input.quantity)) {
-    return { error: "quantity must be a positive finite number" };
+  if (!isValidQuantity(input.quantity)) {
+    return { error: "quantity must be positive and no greater than 1,000,000,000,000" };
   }
-  if (!isPositiveFiniteNumber(input.avgPrice)) {
-    return { error: "avgPrice must be a positive finite number" };
+  if (!isValidPrice(input.avgPrice)) {
+    return { error: "avgPrice must be positive and no greater than 1,000,000,000" };
   }
   if (!isOptionalText(input.name, 120)) {
     return { error: "name must be 120 characters or fewer" };
@@ -107,14 +124,14 @@ export function validatePortfolioUpdate(
 
   const update: PortfolioUpdate = {};
   if ("quantity" in input) {
-    if (!isPositiveFiniteNumber(input.quantity)) {
-      return { error: "quantity must be a positive finite number" };
+    if (!isValidQuantity(input.quantity)) {
+      return { error: "quantity must be positive and no greater than 1,000,000,000,000" };
     }
     update.quantity = input.quantity;
   }
   if ("avgPrice" in input) {
-    if (!isPositiveFiniteNumber(input.avgPrice)) {
-      return { error: "avgPrice must be a positive finite number" };
+    if (!isValidPrice(input.avgPrice)) {
+      return { error: "avgPrice must be positive and no greater than 1,000,000,000" };
     }
     update.avgPrice = input.avgPrice;
   }

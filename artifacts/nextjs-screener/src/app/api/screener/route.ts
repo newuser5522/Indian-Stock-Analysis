@@ -25,6 +25,21 @@ function compareRows(a: ScreenerRow, b: ScreenerRow, sortBy: string, order: stri
   return String(left).localeCompare(String(right)) * direction;
 }
 
+function matchesRange(
+  value: number | undefined,
+  min: number | null,
+  max: number | null,
+): boolean {
+  const lower = min !== null && Number.isFinite(min) ? min : undefined;
+  const upper = max !== null && Number.isFinite(max) ? max : undefined;
+  if (lower === undefined && upper === undefined) return true;
+  if (value == null || !Number.isFinite(value)) return false;
+  return (
+    (lower === undefined || value >= lower) &&
+    (upper === undefined || value <= upper)
+  );
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -37,6 +52,22 @@ export async function GET(req: NextRequest) {
     const minMarketCapCr = sp.has("minMarketCapCr")
       ? Number(sp.get("minMarketCapCr"))
       : null;
+    const maxMarketCapCr = sp.has("maxMarketCapCr")
+      ? Number(sp.get("maxMarketCapCr"))
+      : null;
+    const minPrice = sp.has("minPrice") ? Number(sp.get("minPrice")) : null;
+    const maxPrice = sp.has("maxPrice") ? Number(sp.get("maxPrice")) : null;
+    const minChangePct = sp.has("minChangePct")
+      ? Number(sp.get("minChangePct"))
+      : null;
+    const maxChangePct = sp.has("maxChangePct")
+      ? Number(sp.get("maxChangePct"))
+      : null;
+    const minVolume = sp.has("minVolume") ? Number(sp.get("minVolume")) : null;
+    const minDividendYield = sp.has("minDividendYield")
+      ? Number(sp.get("minDividendYield"))
+      : null;
+    const minRoePct = sp.has("minRoePct") ? Number(sp.get("minRoePct")) : null;
     const sortBy = sp.get("sortBy") ?? "marketCap";
     const sortOrder = sp.get("sortOrder") ?? "desc";
     const limitParam = sp.get("limit");
@@ -131,15 +162,27 @@ export async function GET(req: NextRequest) {
       .filter((row) => {
         if (exchange && exchange !== "ALL" && row.exchange !== exchange) return false;
         if (sector && row.sector !== sector) return false;
-        if (minPe !== null && Number.isFinite(minPe) && row.trailingPE != null && row.trailingPE < minPe) return false;
-        if (maxPe !== null && Number.isFinite(maxPe) && row.trailingPE != null && row.trailingPE > maxPe) return false;
-        if (minPb !== null && Number.isFinite(minPb) && row.priceToBook != null && row.priceToBook < minPb) return false;
-        if (maxPb !== null && Number.isFinite(maxPb) && row.priceToBook != null && row.priceToBook > maxPb) return false;
+        const marketCapCr =
+          row.marketCap == null ? undefined : row.marketCap / 1e7;
+        if (!matchesRange(row.trailingPE, minPe, maxPe)) return false;
+        if (!matchesRange(row.priceToBook, minPb, maxPb)) return false;
+        if (!matchesRange(marketCapCr, minMarketCapCr, maxMarketCapCr)) return false;
+        if (!matchesRange(row.regularMarketPrice, minPrice, maxPrice)) return false;
+        if (!matchesRange(row.regularMarketChangePercent, minChangePct, maxChangePct)) return false;
+        if (!matchesRange(row.regularMarketVolume, minVolume, null)) return false;
         if (
-          minMarketCapCr !== null &&
-          Number.isFinite(minMarketCapCr) &&
-          row.marketCap != null &&
-          row.marketCap / 1e7 < minMarketCapCr
+          !matchesRange(
+            row.dividendYield == null ? undefined : row.dividendYield * 100,
+            minDividendYield,
+            null,
+          )
+        ) return false;
+        if (
+          !matchesRange(
+            row.returnOnEquity == null ? undefined : row.returnOnEquity * 100,
+            minRoePct,
+            null,
+          )
         ) return false;
         return true;
       })

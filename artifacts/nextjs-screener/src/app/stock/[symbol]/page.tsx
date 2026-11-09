@@ -389,9 +389,13 @@ export default function StockPage() {
   });
   const historyTable = historyTableData?.rows ?? [];
   const historyTableTotal = historyTableData?.total ?? 0;
-  const { data: stockNews = [], isLoading: newsLoading } = useQuery<NewsItem[]>({
+  const {
+    data: stockNews = [],
+    isLoading: newsLoading,
+    isError: newsError,
+  } = useQuery<NewsItem[]>({
     queryKey: ["stock", "news", rawSymbol],
-    queryFn: () => fetch(apiUrl(`/stocks/news/${encodeURIComponent(rawSymbol)}`)).then(r => r.json()),
+    queryFn: () => fetchStockData(apiUrl(`/stocks/news/${encodeURIComponent(rawSymbol)}`)),
     enabled: !!rawSymbol,
     staleTime: 5 * 60 * 1000,
   });
@@ -1097,6 +1101,10 @@ export default function StockPage() {
         <div className="rounded-lg border bg-card divide-y overflow-hidden">
           {newsLoading ? (
             <div className="p-8 text-center text-muted-foreground text-sm">Loading news…</div>
+          ) : newsError ? (
+            <div role="alert" className="p-8 text-center text-amber-500 text-sm">
+              Stock news is temporarily unavailable.
+            </div>
           ) : stockNews.length === 0 ? (
             <div className="py-10 text-center text-muted-foreground text-sm">No news found</div>
           ) : (

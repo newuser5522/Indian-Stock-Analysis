@@ -1,3 +1,5 @@
+import { cache } from "./cache";
+
 const YF_BASE = "https://query1.finance.yahoo.com";
 const YF_BASE2 = "https://query2.finance.yahoo.com";
 
@@ -20,6 +22,15 @@ const NSE_HEADERS = {
   Referer: "https://www.nseindia.com/",
 };
 
+function upstreamFetch(
+  input: string | URL | Request,
+  init: RequestInit = {},
+): Promise<Response> {
+  const timeout = AbortSignal.timeout(10_000);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+  return fetch(input, { ...init, signal });
+}
+
 export interface NseData {
   pe?: number;
   marketCapCrores?: number;
@@ -36,11 +47,11 @@ export async function fetchNseData(symbol: string): Promise<NseData> {
   const nseSymbol = symbol.replace(/\.(NS|BO)$/i, "").toUpperCase();
   try {
     const [quoteRes, tradeRes] = await Promise.all([
-      fetch(
+      upstreamFetch(
         `${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}`,
         { headers: NSE_HEADERS },
       ),
-      fetch(
+      upstreamFetch(
         `${NSE_BASE}/quote-equity?symbol=${encodeURIComponent(nseSymbol)}&section=trade_info`,
         { headers: NSE_HEADERS },
       ),
@@ -95,7 +106,7 @@ export async function fetchNseData(symbol: string): Promise<NseData> {
 }
 
 async function yfFetch(url: string): Promise<unknown> {
-  const res = await fetch(url, { headers: HEADERS });
+  const res = await upstreamFetch(url, { headers: HEADERS });
   if (!res.ok)
     throw new Error(`Yahoo Finance fetch failed: ${res.status} ${url}`);
   return res.json();
@@ -168,7 +179,8 @@ async function fetchChartMeta(symbol: string): Promise<YFQuote | null> {
     const meta = result?.meta;
     if (!meta) return null;
 
-    const price = meta.regularMarketPrice ?? 0;
+    const price = meta.regularMarketPrice;
+    if (price == null || !Number.isFinite(price) || price <= 0) return null;
     const quotes = result?.indicators?.quote?.[0];
     const timestamps = result?.timestamp ?? [];
     // Yahoo's chartPreviousClose can be the first close in a multi-day range.
@@ -203,8 +215,8 @@ async function fetchChartMeta(symbol: string): Promise<YFQuote | null> {
       fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
       exchange: meta.exchangeName,
     };
-  } catch {
-    return null;
+  } catch (error) {
+    throw error;
   }
 }
 
@@ -214,9 +226,23 @@ export async function fetchQuotes(symbols: string[]): Promise<YFQuote[]> {
   const results: YFQuote[] = [];
   for (let i = 0; i < symbols.length; i += BATCH) {
     const batch = symbols.slice(i, i + BATCH);
-    const fetched = await Promise.all(batch.map(fetchChartMeta));
-    for (const q of fetched) {
-      if (q) results.push(q);
+    const fetched = await Promise.allSettled(batch.map((symbol) =>
+      cache.getOrSet(
+        `yahoo:quote:${symbol}`,
+        () => fetchChartMeta(symbol),
+        30_000,
+      ),
+    ));
+    let failed = 0;
+    for (const result of fetched) {
+      if (result.status === "rejected") {
+        failed++;
+      } else if (result.value) {
+        results.push(result.value);
+      }
+    }
+    if (failed === fetched.length && failed > 0) {
+      throw new Error("Yahoo Finance quote requests failed");
     }
   }
   return results;
@@ -279,7 +305,7 @@ async function loadIndianEquityScreenerQuotes(
     total: number;
     quotes: YFQuote[];
   }> {
-    const response = await fetch(url, {
+    const response = await upstreamFetch(url, {
       method: "POST",
       headers: {
         ...HEADERS,
@@ -437,7 +463,7 @@ async function getYFCrumb(): Promise<{ crumb: string; cookie: string } | null> {
   if (_crumb && _cookies) return { crumb: _crumb, cookie: _cookies };
 
   try {
-    const pageRes = await fetch("https://fc.yahoo.com/", {
+    const pageRes = await upstreamFetch("https://fc.yahoo.com/", {
       headers: HEADERS,
       redirect: "manual",
     });
@@ -445,7 +471,7 @@ async function getYFCrumb(): Promise<{ crumb: string; cookie: string } | null> {
     const cookieStr = buildYFCookieHeader(setCookieHeader);
     if (!cookieStr) return null;
 
-    const crumbRes = await fetch(
+    const crumbRes = await upstreamFetch(
       "https://query2.finance.yahoo.com/v1/test/getcrumb",
       {
         headers: { ...HEADERS, Cookie: cookieStr },
@@ -477,7 +503,7 @@ export async function fetchSummary(symbol: string): Promise<YFSummary> {
     const crumb = auth?.crumb;
     const cookie = auth?.cookie ?? "";
     const url = `${YF_BASE}/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&lang=en-US&region=IN${crumb ? `&crumb=${encodeURIComponent(crumb)}` : ""}`;
-    const res = await fetch(url, {
+    const res = await upstreamFetch(url, {
       headers: { ...HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
     });
     if (!res.ok) return {};
@@ -543,7 +569,7 @@ export async function fetchSummary(symbol: string): Promise<YFSummary> {
     const cookie = auth?.cookie ?? "";
     if (crumb) {
       const url = `${YF_BASE}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(crumb)}`;
-      const res = await fetch(url, {
+      const res = await upstreamFetch(url, {
         headers: { ...HEADERS, ...(cookie ? { Cookie: cookie } : {}) },
       });
       if (res.ok) {
@@ -659,6 +685,11 @@ export interface FinancialSeriesPoint {
   grossProfit?: number;
   operatingIncome?: number;
   operatingExpense?: number;
+  interestExpense?: number;
+  interestIncome?: number;
+  depreciation?: number;
+  pretaxIncome?: number;
+  taxProvision?: number;
   otherIncome?: number;
   netIncome?: number;
   eps?: number;
@@ -732,8 +763,17 @@ type FinancialNumericKey = Exclude<
 const FINANCIAL_TYPES: Array<[string, FinancialNumericKey]> = [
   ["TotalRevenue", "revenue"],
   ["GrossProfit", "grossProfit"],
+  ["CostOfRevenue", "costOfRevenue"],
   ["OperatingIncome", "operatingIncome"],
   ["OperatingExpense", "operatingExpense"],
+  ["InterestIncomeNonOperating", "interestIncome"],
+  ["InterestExpenseNonOperating", "interestExpense"],
+  [
+    "DepreciationAndAmortizationInIncomeStatement",
+    "depreciation",
+  ],
+  ["PretaxIncome", "pretaxIncome"],
+  ["TaxProvision", "taxProvision"],
   ["OtherNonOperatingIncomeExpenses", "otherIncome"],
   ["NetIncome", "netIncome"],
   ["DilutedEPS", "eps"],
@@ -1194,9 +1234,8 @@ export async function fetchMarketNews(count = 25): Promise<YFNewsItem[]> {
   const feedUrl =
     "https://news.google.com/rss/search?q=" +
     `${encodeURIComponent("Indian stock market NIFTY NSE BSE")}&hl=en-IN&gl=IN&ceid=IN:en`;
-  const response = await fetch(feedUrl, {
+  const response = await upstreamFetch(feedUrl, {
     headers: { "User-Agent": HEADERS["User-Agent"] },
-    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
     throw new Error(`Market news feed failed: HTTP ${response.status}`);
@@ -1249,15 +1288,11 @@ export async function fetchStockNews(
   symbol: string,
   count = 15,
 ): Promise<YFNewsItem[]> {
-  try {
-    const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(symbol)}&lang=en-US&region=IN&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`;
-    const data = (await yfFetch(url)) as { news?: YFNewsItem[] };
-    return (data?.news ?? []).sort(
-      (a, b) => b.providerPublishTime - a.providerPublishTime,
-    );
-  } catch {
-    return [];
-  }
+  const url = `${YF_BASE}/v1/finance/search?q=${encodeURIComponent(symbol)}&lang=en-US&region=IN&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`;
+  const data = (await yfFetch(url)) as { news?: YFNewsItem[] };
+  return (data?.news ?? []).sort(
+    (a, b) => b.providerPublishTime - a.providerPublishTime,
+  );
 }
 
 /* ─── Sector indices ───────────────────────────────────────────────────── */
@@ -1293,7 +1328,11 @@ export async function fetchSectorIndices(): Promise<SectorIndexQuote[]> {
       } as SectorIndexQuote;
     }),
   );
-  return results.filter(Boolean) as SectorIndexQuote[];
+  const available = results.filter(Boolean) as SectorIndexQuote[];
+  if (available.length === 0) {
+    throw new Error("No sector index quotes were returned");
+  }
+  return available;
 }
 
 /* ─── Sector performance for RRG ──────────────────────────────────────── */
@@ -1419,14 +1458,15 @@ interface NseDeliveryMetrics {
   tradeCount: number;
 }
 
-const nseDeliveryMetricsCache = new Map<
-  string,
-  { expiresAt: number; value: NseDeliveryMetrics | null }
->();
-const nseDeliveryMetricsRequests = new Map<
-  string,
-  Promise<NseDeliveryMetrics | null>
->();
+interface BhavcopyCacheEntry {
+  expiresAt: number;
+  csv?: string;
+  error?: Error;
+}
+
+const bhavcopyCache = new Map<string, BhavcopyCacheEntry>();
+const bhavcopyRequests = new Map<string, Promise<string>>();
+const MAX_BHAVCOPY_CACHE_DATES = 60;
 
 function getNseDateParts(timestamp: number) {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -1447,90 +1487,115 @@ async function fetchNseDeliveryMetrics(
   timestamp: number,
 ): Promise<NseDeliveryMetrics | null> {
   const { archiveDate, isoDate } = getNseDateParts(timestamp);
-  const cacheKey = `${symbol}:${archiveDate}`;
-  const cached = nseDeliveryMetricsCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-  const pending = nseDeliveryMetricsRequests.get(cacheKey);
-  if (pending) return pending;
-
-  const request = (async () => {
-    const response = await fetch(
-      `https://archives.nseindia.com/products/content/sec_bhavdata_full_${archiveDate}.csv`,
-      {
-        headers: {
-          "User-Agent": HEADERS["User-Agent"],
-          Accept: "text/csv,*/*",
-        },
-        signal: AbortSignal.timeout(10_000),
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        `NSE bhavcopy request failed: ${response.status} (${isoDate})`,
-      );
-    }
-
-    const csv = await response.text();
-    const rows = csv.split(/\r?\n/);
-    const record = rows.find((row) => row.startsWith(`${symbol},`));
-    if (!record) return null;
-
-    const fields = record.split(",").map((field) => field.trim());
-    if (fields[1] !== "EQ") return null;
-    if (
-      !fields[4] ||
-      !fields[5] ||
-      !fields[6] ||
-      !fields[8] ||
-      !fields[10] ||
-      !fields[12] ||
-      !fields[13] ||
-      !fields[14]
-    ) {
-      return null;
-    }
-
-    const open = Number(fields[4]);
-    const high = Number(fields[5]);
-    const low = Number(fields[6]);
-    const close = Number(fields[8]);
-    const tradedQty = Number(fields[10]);
-    const tradeCount = Number(fields[12]);
-    const deliveryQuantity = Number(fields[13]);
-    const deliveryPct = Number(fields[14]);
-    if (
-      !Number.isFinite(open) ||
-      !Number.isFinite(high) ||
-      !Number.isFinite(low) ||
-      !Number.isFinite(close) ||
-      !Number.isFinite(tradedQty) ||
-      !Number.isFinite(tradeCount) ||
-      !Number.isFinite(deliveryQuantity) ||
-      !Number.isFinite(deliveryPct)
-    ) {
-      return null;
-    }
-
-    return {
-      deliveryValueCr:
-        (((open + high + low + close) / 4) * deliveryQuantity) / 10_000_000,
-      deliveryQty: deliveryQuantity,
-      deliveryPct,
-      tradedQty,
-      tradeCount,
-    };
-  })();
-  nseDeliveryMetricsRequests.set(cacheKey, request);
-  try {
-    const value = await request;
-    nseDeliveryMetricsCache.set(cacheKey, {
-      expiresAt: Date.now() + 6 * 60 * 60 * 1000,
-      value,
-    });
-    return value;
-  } finally {
-    nseDeliveryMetricsRequests.delete(cacheKey);
+  const cached = bhavcopyCache.get(archiveDate);
+  if (cached && cached.expiresAt > Date.now()) {
+    bhavcopyCache.delete(archiveDate);
+    bhavcopyCache.set(archiveDate, cached);
+    if (cached.error) throw cached.error;
+    if (cached.csv != null) return parseBhavcopyMetrics(cached.csv, symbol, isoDate);
   }
+
+  let request = bhavcopyRequests.get(archiveDate);
+  if (!request) {
+    request = (async () => {
+      const response = await upstreamFetch(
+        `https://archives.nseindia.com/products/content/sec_bhavdata_full_${archiveDate}.csv`,
+        {
+          headers: {
+            "User-Agent": HEADERS["User-Agent"],
+            Accept: "text/csv,*/*",
+          },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`NSE bhavcopy request failed: ${response.status} (${isoDate})`);
+      }
+      return response.text();
+    })();
+    bhavcopyRequests.set(archiveDate, request);
+  }
+
+  try {
+    const csv = await request;
+    setBhavcopyCacheEntry(archiveDate, {
+      expiresAt: Date.now() + 6 * 60 * 60 * 1000,
+      csv,
+    });
+    return parseBhavcopyMetrics(csv, symbol, isoDate);
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    setBhavcopyCacheEntry(archiveDate, {
+      expiresAt: Date.now() + 3 * 60 * 1000,
+      error: failure,
+    });
+    throw failure;
+  } finally {
+    bhavcopyRequests.delete(archiveDate);
+  }
+}
+
+function setBhavcopyCacheEntry(key: string, value: BhavcopyCacheEntry): void {
+  bhavcopyCache.delete(key);
+  while (bhavcopyCache.size >= MAX_BHAVCOPY_CACHE_DATES) {
+    const oldest = bhavcopyCache.keys().next().value;
+    if (oldest === undefined) break;
+    bhavcopyCache.delete(oldest);
+  }
+  bhavcopyCache.set(key, value);
+}
+
+function parseBhavcopyMetrics(
+  csv: string,
+  symbol: string,
+  isoDate: string,
+): NseDeliveryMetrics | null {
+  const record = csv.split(/\r?\n/).find((row) => row.startsWith(`${symbol},`));
+  if (!record) return null;
+
+  const fields = record.split(",").map((field) => field.trim());
+  if (fields[1] !== "EQ") return null;
+  if (
+    !fields[4] ||
+    !fields[5] ||
+    !fields[6] ||
+    !fields[8] ||
+    !fields[10] ||
+    !fields[12] ||
+    !fields[13] ||
+    !fields[14]
+  ) {
+    return null;
+  }
+
+  const open = Number(fields[4]);
+  const high = Number(fields[5]);
+  const low = Number(fields[6]);
+  const close = Number(fields[8]);
+  const tradedQty = Number(fields[10]);
+  const tradeCount = Number(fields[12]);
+  const deliveryQuantity = Number(fields[13]);
+  const deliveryPct = Number(fields[14]);
+  if (
+    !Number.isFinite(open) ||
+    !Number.isFinite(high) ||
+    !Number.isFinite(low) ||
+    !Number.isFinite(close) ||
+    !Number.isFinite(tradedQty) ||
+    !Number.isFinite(tradeCount) ||
+    !Number.isFinite(deliveryQuantity) ||
+    !Number.isFinite(deliveryPct)
+  ) {
+    throw new Error(`Invalid NSE bhavcopy record (${isoDate})`);
+  }
+
+  return {
+    deliveryValueCr:
+      (((open + high + low + close) / 4) * deliveryQuantity) / 10_000_000,
+    deliveryQty: deliveryQuantity,
+    deliveryPct,
+    tradedQty,
+    tradeCount,
+  };
 }
 
 export async function fetchHistoryTable(

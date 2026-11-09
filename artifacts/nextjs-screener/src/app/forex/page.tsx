@@ -90,16 +90,28 @@ function CurrencyConverter({ pairs }: { pairs: ForexPair[] }) {
 }
 
 export default function ForexPage() {
-  const { data: pairs = [], isLoading, dataUpdatedAt, refetch } = useQuery<ForexPair[]>({
+  const {
+    data: pairs = [],
+    isLoading,
+    isError,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery<ForexPair[]>({
     queryKey: ["market", "forex"],
-    queryFn: () => fetch(apiUrl("/market/forex")).then(r => r.json()),
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/market/forex"));
+      if (!response.ok) throw new Error(`Forex data request failed (HTTP ${response.status})`);
+      const data: unknown = await response.json();
+      if (!Array.isArray(data)) throw new Error("Forex API returned invalid data");
+      return data as ForexPair[];
+    },
     refetchInterval: 60_000,
   });
 
   const usdInr = pairs.find(p => p.base === "USD");
 
   return (
-    <div className="space-y-5 max-w-screen-xl">
+    <div className="space-y-5 max-w-7xl">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -116,13 +128,26 @@ export default function ForexPage() {
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          {dataUpdatedAt ? `Updated ${new Date(dataUpdatedAt).toLocaleTimeString("en-IN")}` : "Refresh"}
+          {isError
+            ? "Refresh failed"
+            : dataUpdatedAt
+              ? `Updated ${new Date(dataUpdatedAt).toLocaleTimeString("en-IN")}`
+              : "Refresh"}
         </button>
       </div>
 
+      {isError && (
+        <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+          Forex data is unavailable.
+          <button type="button" className="ml-2 underline" onClick={() => refetch()}>
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* USD/INR Hero card */}
       {isLoading ? (
-        <div className="rounded-xl border bg-card p-6 h-32 animate-pulse bg-accent/40" />
+        <div className="rounded-xl border p-6 h-32 animate-pulse bg-accent/40" />
       ) : usdInr ? (
         <div className="rounded-xl border bg-card p-6 flex items-center gap-8 flex-wrap">
           <div>

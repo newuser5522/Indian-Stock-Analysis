@@ -21,6 +21,7 @@ async function fetchNseFilings(symbol: string): Promise<Filing[]> {
   ];
 
   const results: Filing[] = [];
+  let successfulResponses = 0;
 
   for (const ft of filingTypes) {
     try {
@@ -34,6 +35,7 @@ async function fetchNseFilings(symbol: string): Promise<Filing[]> {
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) continue;
+      successfulResponses++;
       const data = await res.json() as Record<string, unknown>;
 
       // Corporate actions
@@ -70,9 +72,14 @@ async function fetchNseFilings(symbol: string): Promise<Filing[]> {
           });
         }
       }
-    } catch { continue; }
+    } catch (error) {
+      console.warn(`NSE ${ft.cat} filing request failed for ${symbol}`, error);
+    }
   }
 
+  if (successfulResponses === 0) {
+    throw new Error(`All NSE filing requests failed for ${symbol}`);
+  }
   return results.sort((a, b) => {
     const da = a.date ? new Date(a.date).getTime() : 0;
     const db = b.date ? new Date(b.date).getTime() : 0;
@@ -92,7 +99,11 @@ export async function GET(
       5 * 60 * 1000
     );
     return NextResponse.json(data);
-  } catch {
-    return NextResponse.json([], { status: 200 });
+  } catch (error) {
+    console.error(`Stock filings are unavailable for ${symbol}`, error);
+    return NextResponse.json(
+      { error: "Stock filings are temporarily unavailable" },
+      { status: 502 },
+    );
   }
 }

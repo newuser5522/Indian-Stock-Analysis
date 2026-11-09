@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, isDatabaseConfigured } from "@workspace/db";
+import { count, db, isDatabaseConfigured, sql } from "@workspace/db";
 import { portfolioTable } from "@workspace/db/schema";
 import { fetchQuotes } from "@/lib/yahoo-finance";
 import { validatePortfolioInput } from "@/lib/portfolio-validation";
+import { readJsonBody, RequestBodyError } from "@/lib/request-body";
 
 export async function GET() {
   if (!isDatabaseConfigured()) {
@@ -60,18 +61,29 @@ export async function POST(req: NextRequest) {
   try {
     let body: unknown;
     try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
+      body = await readJsonBody(req);
+    } catch (error) {
+      const status = error instanceof RequestBodyError ? error.status : 400;
+      const message = error instanceof Error ? error.message : "Request body is invalid";
+      return NextResponse.json({ error: message }, { status });
     }
     const validation = validatePortfolioInput(body);
     if ("error" in validation) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
-    const [inserted] = await db
-      .insert(portfolioTable)
-      .values(validation.value)
-      .returning();
+    const inserted = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(73641202)`);
+      const [{ total }] = await tx.select({ total: count() }).from(portfolioTable);
+      if (total >= 100) return null;
+      const [row] = await tx
+        .insert(portfolioTable)
+        .values(validation.value)
+        .returning();
+      return row;
+    });
+    if (!inserted) {
+      return NextResponse.json({ error: "Portfolio limit of 100 holdings reached" }, { status: 409 });
+    }
     return NextResponse.json(inserted, { status: 201 });
   } catch (err) {
     console.error(err);

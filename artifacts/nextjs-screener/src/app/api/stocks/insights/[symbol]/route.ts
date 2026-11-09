@@ -13,10 +13,18 @@ export async function GET(
     return NextResponse.json({ error: "symbol required" }, { status: 400 });
   }
 
-  const data = await cache.getOrSet(
-    `stock:insights:v2:${symbol}`,
-    () => fetchStockInsights(symbol),
-    300_000,
-  );
-  return NextResponse.json(data);
+  try {
+    const data = await cache.getOrSet(
+      `stock:insights:v2:${symbol}`,
+      () => fetchStockInsights(symbol),
+      300_000,
+    );
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error(`Stock insights are unavailable for ${symbol}`, error);
+    return NextResponse.json(
+      { error: "Stock insights are temporarily unavailable" },
+      { status: 502 },
+    );
+  }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -9,7 +10,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, CheckCircle2, CircleHelp } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleHelp,
+} from "lucide-react";
 import {
   formatMarketCap,
   formatPercent,
@@ -20,6 +25,7 @@ import {
 
 export const INSIGHT_TABS = [
   "Advanced Insights",
+  "Ratios",
   "Technicals",
   "Quarterly",
   "Profit & Loss",
@@ -41,6 +47,11 @@ export interface FinancialSeriesPoint {
   grossProfit?: number;
   operatingIncome?: number;
   operatingExpense?: number;
+  interestExpense?: number;
+  interestIncome?: number;
+  depreciation?: number;
+  pretaxIncome?: number;
+  taxProvision?: number;
   otherIncome?: number;
   netIncome?: number;
   eps?: number;
@@ -135,12 +146,32 @@ export interface OwnershipData {
   promoterHolding: number | null;
   promoterPledged: number | null;
   institutionalHolding: number | null;
+  fiiHolding?: number | null;
+  diiHolding?: number | null;
   publicHolding: number | null;
   quarterlyChange: number | null;
   quarter?: string | null;
   source?: string;
   error?: string;
+  periods?: {
+    date: string;
+    promoterHolding: number | null;
+    promoterPledged: number | null;
+    institutionalHolding: number | null;
+    fiiHolding: number | null;
+    diiHolding: number | null;
+    publicHolding: number | null;
+    shareholderCount: number | null;
+  }[];
 }
+
+type HoldingPeriod = NonNullable<OwnershipData["periods"]>[number];
+type HoldingMetricKey = keyof Omit<HoldingPeriod, "date">;
+type HoldingTableRow = {
+  label: string;
+  key: HoldingMetricKey;
+  children?: HoldingTableRow[];
+};
 
 export interface BulkDeal {
   date: string;
@@ -194,6 +225,170 @@ function growth(current?: number, previous?: number): number | undefined {
     ? ((current - previous) / Math.abs(previous)) * 100
     : undefined;
 }
+
+type FinancialTableRow = {
+  label: string;
+  key?: keyof FinancialSeriesPoint;
+  unit?: "currencyCr" | "percent" | "eps" | "days" | "ratio";
+  emphasized?: boolean;
+  children?: FinancialTableRow[];
+  getValue?: (
+    point: FinancialSeriesPoint,
+    index: number,
+    series: FinancialSeriesPoint[],
+  ) => number | undefined;
+};
+
+const INCOME_STATEMENT_ROWS: FinancialTableRow[] = [
+  {
+    label: "Sales",
+    key: "revenue",
+    emphasized: true,
+    children: [
+      {
+        label: "Sales Growth",
+        unit: "percent",
+        getValue: (point, _index, series) => {
+          const date = new Date(`${point.date}T00:00:00`);
+          if (Number.isNaN(date.getTime()) || point.revenue == null) {
+            return undefined;
+          }
+          const previousYear = series.find((candidate) => {
+            const previousDate = new Date(`${candidate.date}T00:00:00`);
+            return (
+              previousDate.getFullYear() === date.getFullYear() - 1 &&
+              previousDate.getMonth() === date.getMonth()
+            );
+          });
+          return growth(point.revenue, previousYear?.revenue);
+        },
+      },
+    ],
+  },
+  {
+    label: "Expenses",
+    getValue: (point) =>
+      point.operatingExpense ??
+      (point.revenue != null && point.operatingIncome != null
+        ? point.revenue - point.operatingIncome
+        : undefined),
+    children: [
+      { label: "Cost of Revenue", key: "costOfRevenue" },
+      {
+        label: "Other Operating Expenses",
+        getValue: (point) => {
+          const totalExpenses =
+            point.operatingExpense ??
+            (point.revenue != null && point.operatingIncome != null
+              ? point.revenue - point.operatingIncome
+              : undefined);
+          return totalExpenses != null && point.costOfRevenue != null
+            ? totalExpenses - point.costOfRevenue
+            : undefined;
+        },
+      },
+    ],
+  },
+  { label: "Operating Profit", key: "operatingIncome", emphasized: true },
+  { label: "Operating Margin", key: "operatingMargin", unit: "percent" },
+  {
+    label: "Other Income",
+    key: "otherIncome",
+    children: [
+      { label: "Interest Income", key: "interestIncome" },
+      {
+        label: "Other Non-operating Income / Expense",
+        getValue: (point) =>
+          point.otherIncome != null
+            ? point.otherIncome - (point.interestIncome ?? 0)
+            : undefined,
+      },
+    ],
+  },
+  { label: "Interest", key: "interestExpense" },
+  { label: "Depreciation", key: "depreciation" },
+  { label: "Profit Before Tax", key: "pretaxIncome", emphasized: true },
+  {
+    label: "Tax %",
+    unit: "percent",
+    getValue: (point) =>
+      point.taxProvision != null &&
+      point.pretaxIncome != null &&
+      point.pretaxIncome !== 0
+        ? (point.taxProvision / point.pretaxIncome) * 100
+        : undefined,
+  },
+  {
+    label: "Net Profit",
+    key: "netIncome",
+    emphasized: true,
+    children: [
+      { label: "Net Margin", key: "netMargin", unit: "percent" },
+    ],
+  },
+  { label: "EPS", key: "eps", unit: "eps" },
+];
+
+const BALANCE_SHEET_ROWS: FinancialTableRow[] = [
+  {
+    label: "Total Assets",
+    key: "totalAssets",
+    emphasized: true,
+    children: [
+      {
+        label: "Current Assets",
+        key: "currentAssets",
+        children: [
+          { label: "Inventory", key: "inventory" },
+          { label: "Receivables", key: "receivables" },
+          { label: "Cash & Equivalents", key: "cash" },
+        ],
+      },
+      { label: "Fixed Assets", key: "fixedAssets" },
+      { label: "Capital Work in Progress", key: "capitalWorkInProgress" },
+    ],
+  },
+  {
+    label: "Total Liabilities",
+    key: "totalLiabilities",
+    emphasized: true,
+    children: [
+      { label: "Current Liabilities", key: "currentLiabilities" },
+      { label: "Borrowings", key: "debt" },
+      { label: "Payables", key: "payables" },
+    ],
+  },
+  {
+    label: "Shareholders' Equity",
+    key: "equity",
+    emphasized: true,
+    children: [
+      { label: "Equity Capital", key: "commonStock" },
+      { label: "Reserves", key: "reserves" },
+    ],
+  },
+  { label: "Working Capital", key: "workingCapital" },
+];
+
+const CASHFLOW_ROWS: FinancialTableRow[] = [
+  {
+    label: "Cash from Operating Activity",
+    key: "operatingCashFlow",
+    emphasized: true,
+    children: [
+      { label: "Free Cash Flow", key: "freeCashFlow" },
+    ],
+  },
+  {
+    label: "Cash from Investing Activity",
+    key: "investingCashFlow",
+    children: [{ label: "Capital Expenditure", key: "capitalExpenditure" }],
+  },
+  {
+    label: "Cash from Financing Activity",
+    key: "financingCashFlow",
+  },
+];
 
 function toIndexedSeries(
   data: FinancialSeriesPoint[],
@@ -870,6 +1065,7 @@ function FinancialPanel({
   description,
   data,
   charts,
+  tableRows,
 }: {
   title: string;
   description: string;
@@ -880,7 +1076,44 @@ function FinancialPanel({
     color: string;
     unit?: "currencyCr" | "percent" | "eps" | "days";
   }[];
+  tableRows?: FinancialTableRow[];
 }) {
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const rows: FinancialTableRow[] =
+    tableRows ??
+    charts.map((chart) => ({
+      label: chart.title,
+      key: chart.key,
+      unit: chart.unit ?? "currencyCr",
+    }));
+
+  function formatTableValue(
+    value: number | undefined,
+    unit: "currencyCr" | "percent" | "eps" | "days" | "ratio" = "currencyCr",
+  ) {
+    if (value == null || !Number.isFinite(value)) return "—";
+    if (unit === "currencyCr") {
+      return (value / 1e7).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      });
+    }
+    if (unit === "percent") return `${value.toFixed(1)}%`;
+    if (unit === "eps") return value.toFixed(2);
+    if (unit === "days") return `${value.toFixed(0)} days`;
+    if (unit === "ratio") return value.toFixed(2);
+    return "—";
+  }
+
+  function periodLabel(point: FinancialSeriesPoint) {
+    const date = new Date(`${point.date}T00:00:00`);
+    return Number.isNaN(date.getTime())
+      ? point.period
+      : new Intl.DateTimeFormat("en-IN", {
+          month: "short",
+          year: "numeric",
+        }).format(date);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -895,19 +1128,293 @@ function FinancialPanel({
       {data.length === 0 ? (
         <DataNotice />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {charts.map((chart) => (
-            <TrendCard
-              key={String(chart.key)}
-              title={chart.title}
-              data={data}
-              dataKey={chart.key}
-              color={chart.color}
-              unit={chart.unit}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {charts.map((chart) => (
+              <TrendCard
+                key={String(chart.key)}
+                title={chart.title}
+                data={data}
+                dataKey={chart.key}
+                color={chart.color}
+                unit={chart.unit}
+              />
+            ))}
+          </div>
+          <div className="space-y-2">
+            <div>
+              <h3 className="text-sm font-semibold">Period-by-period results</h3>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Financial values in Rs. Crores, except EPS and percentages.
+              </p>
+            </div>
+            <div className="rounded-lg border bg-card overflow-x-auto">
+              <table className="w-full min-w-max border-collapse text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th
+                      scope="col"
+                      className="sticky left-0 z-10 bg-card px-3 py-2.5 text-left font-semibold text-muted-foreground"
+                    >
+                      Particulars
+                    </th>
+                    {data.map((point) => (
+                      <th
+                        key={`${point.date}-${point.period}`}
+                        scope="col"
+                        className="min-w-24 px-3 py-2.5 text-right font-semibold text-muted-foreground whitespace-nowrap"
+                      >
+                        {periodLabel(point)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const renderRows = (
+                      visibleRows: FinancialTableRow[],
+                      parentKey = "",
+                      depth = 0,
+                    ): React.ReactNode[] =>
+                      visibleRows.flatMap((row) => {
+                        const rowId = `${title}:${parentKey}:${row.label}`;
+                        const isExpanded = expandedRows[rowId] ?? false;
+                        const canExpand = (row.children?.length ?? 0) > 0;
+                        const tableRow = (
+                          <tr
+                            key={rowId}
+                            className={`border-b last:border-0 hover:bg-accent/20 ${row.emphasized ? "font-semibold" : ""}`}
+                          >
+                            <th
+                              scope="row"
+                              className={`sticky left-0 z-10 px-3 py-2 text-left whitespace-nowrap ${row.emphasized ? "bg-muted/40" : "bg-card"}`}
+                            >
+                              <div
+                                className="flex items-center gap-1"
+                                style={{ paddingLeft: `${depth * 14}px` }}
+                              >
+                                {canExpand ? (
+                                  <button
+                                    type="button"
+                                    aria-expanded={isExpanded}
+                                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${row.label}`}
+                                    onClick={() =>
+                                      setExpandedRows((current) => ({
+                                        ...current,
+                                        [rowId]: !isExpanded,
+                                      }))
+                                    }
+                                    className="inline-flex h-5 min-w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                                  >
+                                    <span aria-hidden="true">
+                                      {isExpanded ? "−" : "+"}
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <span className="inline-block w-5" />
+                                )}
+                                {row.label}
+                              </div>
+                            </th>
+                            {data.map((point, index) => {
+                              const value = row.getValue
+                                ? row.getValue(point, index, data)
+                                : row.key && typeof point[row.key] === "number"
+                                  ? (point[row.key] as number)
+                                  : undefined;
+                              const isPercent = row.unit === "percent";
+                              return (
+                                <td
+                                  key={`${point.date}-${point.period}-${rowId}`}
+                                  className={`px-3 py-2 text-right tabular-nums whitespace-nowrap ${isPercent && value != null ? (value > 0 ? "text-emerald-500" : value < 0 ? "text-rose-500" : "") : ""}`}
+                                >
+                                  {formatTableValue(value, row.unit)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                        return [
+                          tableRow,
+                          ...(canExpand && isExpanded
+                            ? renderRows(row.children ?? [], rowId, depth + 1)
+                            : []),
+                        ];
+                      });
+                    return renderRows(rows);
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
+    </div>
+  );
+}
+
+function RatiosPanel({
+  insights,
+  fundamentals,
+}: {
+  insights: StockInsights;
+  fundamentals?: FundamentalSnapshot;
+}) {
+  const metrics = insights.metrics;
+  const percentValue = (value?: number) =>
+    value == null ? "—" : formatPercent(value * 100);
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-semibold">Ratios</h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Latest valuation and quality metrics, followed by historical operating
+          ratios where reported statement data is available.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <MetricCard
+          label="P/E (TTM)"
+          value={formatRatio(fundamentals?.trailingPE)}
+        />
+        <MetricCard
+          label="Price / Book"
+          value={formatRatio(fundamentals?.priceToBook)}
+        />
+        <MetricCard
+          label="ROE"
+          value={percentValue(fundamentals?.returnOnEquity)}
+        />
+        <MetricCard
+          label="ROA"
+          value={percentValue(fundamentals?.returnOnAssets)}
+        />
+        <MetricCard
+          label="Current Ratio"
+          value={formatRatio(metrics.currentRatio)}
+        />
+        <MetricCard
+          label="Quick Ratio"
+          value={formatRatio(metrics.quickRatio)}
+        />
+        <MetricCard
+          label="Debt / Equity"
+          value={formatRatio(metrics.debtToEquity)}
+        />
+        <MetricCard
+          label="Price / Sales"
+          value={formatRatio(metrics.priceToSales)}
+        />
+        <MetricCard
+          label="EV / Sales"
+          value={formatRatio(metrics.evToSales)}
+        />
+        <MetricCard
+          label="EV / EBITDA"
+          value={formatRatio(metrics.evToEbitda)}
+        />
+      </div>
+      <FinancialPanel
+        title="Historical Ratios"
+        description="Calculated from annual statements; unavailable inputs are shown as dashes."
+        data={insights.annual}
+        charts={[]}
+        tableRows={[
+          { label: "Debtor Days", key: "receivableDays", unit: "days" },
+          { label: "Inventory Days", key: "inventoryDays", unit: "days" },
+          { label: "Days Payable", key: "payableDays", unit: "days" },
+          {
+            label: "Cash Conversion Cycle",
+            unit: "days",
+            emphasized: true,
+            getValue: (point) =>
+              point.inventoryDays != null &&
+              point.receivableDays != null &&
+              point.payableDays != null
+                ? point.inventoryDays +
+                  point.receivableDays -
+                  point.payableDays
+                : undefined,
+          },
+          {
+            label: "Working Capital Days",
+            unit: "days",
+            getValue: (point) =>
+              point.workingCapital != null &&
+              point.revenue != null &&
+              point.revenue !== 0
+                ? (point.workingCapital / point.revenue) * 365
+                : undefined,
+          },
+          {
+            label: "Current Ratio",
+            unit: "ratio",
+            getValue: (point) =>
+              point.currentAssets != null &&
+              point.currentLiabilities != null &&
+              point.currentLiabilities !== 0
+                ? point.currentAssets / point.currentLiabilities
+                : undefined,
+          },
+          {
+            label: "Quick Ratio",
+            unit: "ratio",
+            getValue: (point) =>
+              point.currentAssets != null &&
+              point.inventory != null &&
+              point.currentLiabilities != null &&
+              point.currentLiabilities !== 0
+                ? (point.currentAssets - point.inventory) /
+                  point.currentLiabilities
+                : undefined,
+          },
+          {
+            label: "Debt / Equity",
+            unit: "ratio",
+            getValue: (point) =>
+              point.debt != null && point.equity != null && point.equity !== 0
+                ? point.debt / point.equity
+                : undefined,
+          },
+          {
+            label: "ROE",
+            unit: "percent",
+            getValue: (point) =>
+              point.netIncome != null &&
+              point.equity != null &&
+              point.equity !== 0
+                ? (point.netIncome / point.equity) * 100
+                : undefined,
+          },
+          {
+            label: "ROA",
+            unit: "percent",
+            getValue: (point) =>
+              point.netIncome != null &&
+              point.totalAssets != null &&
+              point.totalAssets !== 0
+                ? (point.netIncome / point.totalAssets) * 100
+                : undefined,
+          },
+          {
+            label: "ROCE",
+            unit: "percent",
+            emphasized: true,
+            getValue: (point) => {
+              const capitalEmployed =
+                point.totalAssets != null &&
+                point.currentLiabilities != null
+                  ? point.totalAssets - point.currentLiabilities
+                  : null;
+              return point.operatingIncome != null &&
+                capitalEmployed != null &&
+                capitalEmployed !== 0
+                ? (point.operatingIncome / capitalEmployed) * 100
+                : undefined;
+            },
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -919,7 +1426,25 @@ function ShareholdingPanel({
   ownership?: OwnershipData;
   insights: StockInsights;
 }) {
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const m = insights.metrics;
+  const holdingPeriods =
+    ownership?.periods?.length
+      ? ownership.periods
+      : ownership
+        ? [
+            {
+              date: ownership.quarter ?? "Latest",
+              promoterHolding: ownership.promoterHolding,
+              promoterPledged: ownership.promoterPledged,
+              institutionalHolding: ownership.institutionalHolding,
+              fiiHolding: null,
+              diiHolding: null,
+              publicHolding: ownership.publicHolding,
+              shareholderCount: null,
+            },
+          ]
+        : [];
   const hasOwnershipData =
     ownership != null &&
     [
@@ -1031,6 +1556,168 @@ function ShareholdingPanel({
             : ""}
         </p>
       </div>
+      {holdingPeriods.length > 0 && (
+        <div className="space-y-2">
+          <div>
+            <h3 className="text-sm font-semibold">Historical Shareholding</h3>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Reported ownership percentages by available quarter.
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card overflow-x-auto">
+            <table className="w-full min-w-max border-collapse text-xs">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th
+                    scope="col"
+                    className="sticky left-0 z-10 bg-card px-3 py-2.5 text-left font-semibold text-muted-foreground"
+                  >
+                    Particulars
+                  </th>
+                  {holdingPeriods.map((period) => (
+                    <th
+                      key={period.date}
+                      scope="col"
+                      className="min-w-24 px-3 py-2.5 text-right font-semibold text-muted-foreground whitespace-nowrap"
+                    >
+                      {period.date}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    {
+                      label: "Promoters",
+                      key: "promoterHolding",
+                      children: [
+                        { label: "Promoter Pledged", key: "promoterPledged" },
+                      ],
+                    },
+                    {
+                      label: "FIIs",
+                      key: "fiiHolding",
+                    },
+                    {
+                      label: "DIIs",
+                      key: "diiHolding",
+                    },
+                    {
+                      label: "Public",
+                      key: "publicHolding",
+                      children: [
+                        {
+                          label: "No. of Shareholders",
+                          key: "shareholderCount",
+                        },
+                      ],
+                    },
+                  ] satisfies HoldingTableRow[]
+                ).map((row) => {
+                  const isExpanded = expandedRows[row.key] ?? false;
+                  const children = row.children ?? [];
+                  const canExpand = children.length > 0;
+                  return (
+                    <Fragment key={row.key}>
+                      <tr className="border-b last:border-0 hover:bg-accent/20">
+                        <th
+                          scope="row"
+                          className="sticky left-0 z-10 bg-card px-3 py-2 text-left whitespace-nowrap"
+                        >
+                          <div className="flex items-center gap-1">
+                            {canExpand ? (
+                              <button
+                                type="button"
+                                aria-expanded={isExpanded}
+                                aria-label={`${isExpanded ? "Collapse" : "Expand"} ${row.label}`}
+                                onClick={() =>
+                                  setExpandedRows((current) => ({
+                                    ...current,
+                                    [row.key]: !isExpanded,
+                                  }))
+                                }
+                                className="inline-flex h-5 min-w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                              >
+                                <span aria-hidden="true">
+                                  {isExpanded ? "−" : "+"}
+                                </span>
+                              </button>
+                            ) : (
+                              <span className="inline-block w-5" />
+                            )}
+                            {row.label}
+                          </div>
+                        </th>
+                        {holdingPeriods.map((period) => (
+                          <td
+                            key={`${period.date}-${row.key}`}
+                            className="px-3 py-2 text-right tabular-nums whitespace-nowrap"
+                          >
+                            {period[row.key] == null
+                              ? "—"
+                              : formatPercent(period[row.key])}
+                          </td>
+                        ))}
+                      </tr>
+                      {isExpanded &&
+                        children.map((child) => (
+                          <tr
+                            key={`${row.key}-${child.key}`}
+                            className="border-b last:border-0 hover:bg-accent/20"
+                          >
+                            <th
+                              scope="row"
+                              className="sticky left-0 z-10 bg-card px-3 py-2 text-left whitespace-nowrap"
+                            >
+                              <span className="pl-6">{child.label}</span>
+                            </th>
+                            {holdingPeriods.map((period) => (
+                              <td
+                                key={`${period.date}-${child.key}`}
+                                className="px-3 py-2 text-right tabular-nums whitespace-nowrap"
+                              >
+                                {period[child.key] == null
+                                  ? "—"
+                                  : child.key === "shareholderCount"
+                                    ? period.shareholderCount!.toLocaleString(
+                                        "en-IN",
+                                      )
+                                    : formatPercent(period[child.key]!)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                    </Fragment>
+                  );
+                })}
+                {holdingPeriods.some(
+                  (period) => period.shareholderCount != null,
+                ) && (
+                  <tr className="border-b last:border-0 hover:bg-accent/20">
+                    <th
+                      scope="row"
+                      className="sticky left-0 z-10 bg-card px-3 py-2 text-left whitespace-nowrap"
+                    >
+                      No. of Shareholders
+                    </th>
+                    {holdingPeriods.map((period) => (
+                      <td
+                        key={`${period.date}-shareholders`}
+                        className="px-3 py-2 text-right tabular-nums whitespace-nowrap"
+                      >
+                        {period.shareholderCount == null
+                          ? "—"
+                          : period.shareholderCount.toLocaleString("en-IN")}
+                      </td>
+                    ))}
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1252,6 +1939,8 @@ export function StockInsightsDashboard({
   }
   if (tab === "Advanced Insights" && insights)
     return <AdvancedPanel insights={insights} fundamentals={fundamentals} />;
+  if (tab === "Ratios" && insights)
+    return <RatiosPanel insights={insights} fundamentals={fundamentals} />;
   if (tab === "Quarterly" && insights) {
     return (
       <FinancialPanel
@@ -1279,6 +1968,7 @@ export function StockInsightsDashboard({
           },
           { key: "eps", title: "EPS", color: "#fb7185", unit: "eps" },
         ]}
+        tableRows={INCOME_STATEMENT_ROWS}
       />
     );
   }
@@ -1315,6 +2005,7 @@ export function StockInsightsDashboard({
           { key: "netIncome", title: "Net Profit / PAT", color: "#a78bfa" },
           { key: "eps", title: "EPS", color: "#fb7185", unit: "eps" },
         ]}
+        tableRows={INCOME_STATEMENT_ROWS}
       />
     );
   }
@@ -1360,6 +2051,7 @@ export function StockInsightsDashboard({
             unit: "days",
           },
         ]}
+        tableRows={BALANCE_SHEET_ROWS}
       />
     );
   }
@@ -1392,6 +2084,7 @@ export function StockInsightsDashboard({
             color: "#60a5fa",
           },
         ]}
+        tableRows={CASHFLOW_ROWS}
       />
     );
   }

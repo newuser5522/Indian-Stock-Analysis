@@ -14,7 +14,11 @@ export async function GET(
       5 * 60 * 1000
     );
     return NextResponse.json(news);
-  } catch {
-    return NextResponse.json([], { status: 200 });
+  } catch (error) {
+    console.error(`Stock news is unavailable for ${symbol}`, error);
+    return NextResponse.json(
+      { error: "Stock news is temporarily unavailable" },
+      { status: 502 },
+    );
   }
 }

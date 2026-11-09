@@ -72,14 +72,20 @@ async function fetchEtf(etf: (typeof GOLD_ETFS)[0]) {
 
 async function fetchAll() {
   const results = await Promise.all(GOLD_ETFS.map(fetchEtf));
-  return results.filter(Boolean);
+  const etfs = results.filter(Boolean);
+  if (etfs.length === 0) throw new Error("No gold ETF quotes were available");
+  return etfs;
 }
 
 export async function GET() {
   try {
     const data = await cache.getOrSet("market:gold-etf", () => fetchAll(), 60 * 1000);
     return NextResponse.json(data);
-  } catch {
-    return NextResponse.json([]);
+  } catch (error) {
+    console.error("Gold ETF data is unavailable", error);
+    return NextResponse.json(
+      { error: "Gold ETF data is temporarily unavailable" },
+      { status: 502 },
+    );
   }
 }

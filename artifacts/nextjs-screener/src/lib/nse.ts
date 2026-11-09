@@ -13,9 +13,15 @@ export const NSE_HEADERS = {
   Referer: "https://www.nseindia.com/",
 };
 
+function nseFetch(input: string | URL | Request, init: RequestInit = {}) {
+  const timeout = AbortSignal.timeout(10_000);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+  return fetch(input, { ...init, signal });
+}
+
 /** Establish NSE session cookie string */
 async function getNseSession(): Promise<string> {
-  const sessionRes = await fetch("https://www.nseindia.com", {
+  const sessionRes = await nseFetch("https://www.nseindia.com", {
     headers: NSE_HEADERS,
     next: { revalidate: 0 },
   });
@@ -34,7 +40,7 @@ export async function fetchNseApi<T = unknown>(
 ): Promise<T> {
   const cookieStr = await getNseSession();
   await new Promise((r) => setTimeout(r, delayMs));
-  const res = await fetch(`https://www.nseindia.com/api/${path}`, {
+  const res = await nseFetch(`https://www.nseindia.com/api/${path}`, {
     headers: { ...NSE_HEADERS, Cookie: cookieStr },
     next: { revalidate: 0 },
   });

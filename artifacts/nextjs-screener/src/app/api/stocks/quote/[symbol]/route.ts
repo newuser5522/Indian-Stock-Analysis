@@ -11,15 +11,28 @@ export async function GET(
   const { symbol } = await params;
   if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
-  const cacheKey = `stock:quote:${symbol}`;
-  const quote = await cache.getOrSet(
-    cacheKey,
-    async () => {
-      const quotes = await fetchQuotes([symbol]);
-      return quotes[0] ?? null;
-    },
-    60_000
-  );
-  if (!quote) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json(quote);
+  try {
+    const cacheKey = `stock:quote:${symbol}`;
+    const quote = await cache.getOrSet(
+      cacheKey,
+      async () => {
+        const quotes = await fetchQuotes([symbol]);
+        return quotes[0] ?? null;
+      },
+      60_000
+    );
+    if (!quote) {
+      return NextResponse.json(
+        { error: "No quote is available for this symbol" },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json(quote);
+  } catch (error) {
+    console.error(`Quote is unavailable for ${symbol}`, error);
+    return NextResponse.json(
+      { error: "Quote is temporarily unavailable" },
+      { status: 502 },
+    );
+  }
 }

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, isDatabaseConfigured } from "@workspace/db";
+import { db, eq, isDatabaseConfigured } from "@workspace/db";
 import { portfolioTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
 import {
   parsePortfolioId,
   validatePortfolioUpdate,
 } from "@/lib/portfolio-validation";
+import { readJsonBody, RequestBodyError } from "@/lib/request-body";
 
 export async function DELETE(
   _req: NextRequest,
@@ -45,9 +45,11 @@ export async function PUT(
     if (numId == null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     let body: unknown;
     try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
+      body = await readJsonBody(req);
+    } catch (error) {
+      const status = error instanceof RequestBodyError ? error.status : 400;
+      const message = error instanceof Error ? error.message : "Request body is invalid";
+      return NextResponse.json({ error: message }, { status });
     }
     const validation = validatePortfolioUpdate(body);
     if ("error" in validation) {

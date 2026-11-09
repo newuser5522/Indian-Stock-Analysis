@@ -60,6 +60,23 @@ export async function GET(
       }))
       .filter((period) => Number.isFinite(period.timestamp))
       .sort((a, b) => a.timestamp - b.timestamp);
+    const periods = holdingPeriods.map(({ date, rows }) => ({
+      date,
+      promoterHolding: getHolding(rows, "Promoter & Promoter Group"),
+      promoterPledged: getHolding(
+        rows,
+        "Shares pledged or otherwise encumbered",
+      ),
+      institutionalHolding: getHolding(rows, "Institutional Investors"),
+      fiiHolding:
+        getHolding(rows, "Foreign Portfolio Investors") ??
+        getHolding(rows, "Foreign Institutional Investors"),
+      diiHolding: getHolding(rows, "Domestic Institutional Investors"),
+      publicHolding: getHolding(rows, "Public"),
+      shareholderCount:
+        getHolding(rows, "Number of Shareholders") ??
+        getHolding(rows, "No. of Shareholders"),
+    }));
     const latest = holdingPeriods[holdingPeriods.length - 1];
     const previous = holdingPeriods[holdingPeriods.length - 2];
     const latestPromoter =
@@ -83,6 +100,15 @@ export async function GET(
     const publicHolding =
       data.retailHoldingPct ??
       (latest != null ? getHolding(latest.rows, "Public") : null);
+    const fiiHolding =
+      latest != null
+        ? getHolding(latest.rows, "Foreign Portfolio Investors") ??
+          getHolding(latest.rows, "Foreign Institutional Investors")
+        : null;
+    const diiHolding =
+      latest != null
+        ? getHolding(latest.rows, "Domestic Institutional Investors")
+        : null;
     const quarterlyChange =
       data.promoterChange ??
       (latestPromoter != null && previousPromoter != null
@@ -93,21 +119,19 @@ export async function GET(
       promoterHolding,
       promoterPledged,
       institutionalHolding,
+      fiiHolding,
+      diiHolding,
       publicHolding,
       quarterlyChange,
       quarter: data.qtrName ?? latest?.date ?? null,
       source: "NSE India",
+      periods,
     });
-  } catch {
-    return NextResponse.json({
-      symbol: nseSymbol,
-      promoterHolding: null,
-      promoterPledged: null,
-      institutionalHolding: null,
-      publicHolding: null,
-      quarterlyChange: null,
-      quarter: null,
-      source: "NSE India",
-    });
+  } catch (error) {
+    console.error(`Stock ownership data is unavailable for ${nseSymbol}`, error);
+    return NextResponse.json(
+      { error: "Stock ownership data is temporarily unavailable" },
+      { status: 502 },
+    );
   }
 }

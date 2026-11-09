@@ -69,14 +69,20 @@ async function fetchPair(pair: (typeof FOREX_PAIRS)[0]) {
 
 async function fetchAll() {
   const results = await Promise.all(FOREX_PAIRS.map(fetchPair));
-  return results.filter(Boolean);
+  const pairs = results.filter(Boolean);
+  if (pairs.length === 0) throw new Error("No forex pairs were available");
+  return pairs;
 }
 
 export async function GET() {
   try {
     const data = await cache.getOrSet("market:forex", () => fetchAll(), 60 * 1000);
     return NextResponse.json(data);
-  } catch {
-    return NextResponse.json([]);
+  } catch (error) {
+    console.error("Forex data is unavailable", error);
+    return NextResponse.json(
+      { error: "Forex data is temporarily unavailable" },
+      { status: 502 },
+    );
   }
 }

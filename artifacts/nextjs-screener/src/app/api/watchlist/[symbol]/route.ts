@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, isDatabaseConfigured } from "@workspace/db";
+import { db, eq, isDatabaseConfigured } from "@workspace/db";
 import { watchlistTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { getWatchlistDatabaseError } from "@/lib/watchlist-db-error";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +15,14 @@ export async function DELETE(
 
   try {
     const { symbol } = await params;
-    if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
-    await db.delete(watchlistTable).where(eq(watchlistTable.symbol, symbol));
+    if (!/^[A-Za-z0-9.^&=_-]{1,50}$/.test(symbol)) {
+      return NextResponse.json({ error: "A valid stock symbol is required" }, { status: 400 });
+    }
+    const [deleted] = await db
+      .delete(watchlistTable)
+      .where(eq(watchlistTable.symbol, symbol.trim().toUpperCase()))
+      .returning({ symbol: watchlistTable.symbol });
+    if (!deleted) return NextResponse.json({ error: "Watchlist item not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("watchlist DELETE error", err);
