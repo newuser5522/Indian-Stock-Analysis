@@ -1,38 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchNseApi } from "@/lib/nse";
+import {
+  getQuarterlyShareholdingChange,
+  getShareholdingPercent,
+  getShareholdingPeriods,
+  type ShareholdingRow,
+} from "@/lib/nse-shareholding";
 
 export const dynamic = "force-dynamic";
 
 interface NseTopCorpInfo {
   data?: NseTopCorpInfo;
-  promoterHoldingPct?: number;
-  promoterPledgedPct?: number;
-  institutionalHoldingPct?: number;
-  retailHoldingPct?: number;
-  promoterChange?: number;
-  qtrName?: string;
   shareholdings_patterns?: {
-    data?: Record<string, Record<string, string | number>[]>;
+    data?: Record<string, ShareholdingRow[]>;
   };
-}
-
-function numeric(value: unknown): number | null {
-  if (typeof value !== "number" && typeof value !== "string") return null;
-  const parsed = parseFloat(String(value).replace(/,/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getHolding(
-  rows: Record<string, string | number>[],
-  key: string,
-): number | null {
-  for (const row of rows) {
-    const match = Object.entries(row).find(
-      ([label]) => label.trim().toLowerCase() === key.toLowerCase(),
-    );
-    if (match) return numeric(match[1]);
-  }
-  return null;
 }
 
 export async function GET(
@@ -50,70 +31,59 @@ export async function GET(
       `top-corp-info?symbol=${encodeURIComponent(nseSymbol)}&market=equities`,
     );
     const data = response.data ?? response;
-    const holdingPeriods = Object.entries(
-      data.shareholdings_patterns?.data ?? {},
-    )
-      .map(([date, rows]) => ({
-        date,
-        timestamp: Date.parse(date),
-        rows,
-      }))
-      .filter((period) => Number.isFinite(period.timestamp))
-      .sort((a, b) => a.timestamp - b.timestamp);
+    const holdingPeriods = getShareholdingPeriods(data.shareholdings_patterns?.data);
     const periods = holdingPeriods.map(({ date, rows }) => ({
       date,
-      promoterHolding: getHolding(rows, "Promoter & Promoter Group"),
-      promoterPledged: getHolding(
-        rows,
+      promoterHolding: getShareholdingPercent(rows, ["Promoter & Promoter Group"]),
+      promoterPledged: getShareholdingPercent(rows, [
         "Shares pledged or otherwise encumbered",
-      ),
-      institutionalHolding: getHolding(rows, "Institutional Investors"),
-      fiiHolding:
-        getHolding(rows, "Foreign Portfolio Investors") ??
-        getHolding(rows, "Foreign Institutional Investors"),
-      diiHolding: getHolding(rows, "Domestic Institutional Investors"),
-      publicHolding: getHolding(rows, "Public"),
-      shareholderCount:
-        getHolding(rows, "Number of Shareholders") ??
-        getHolding(rows, "No. of Shareholders"),
+        "Shares pledged or otherwise encumbered by promoters",
+      ]),
+      institutionalHolding: getShareholdingPercent(rows, ["Institutional Investors"]),
+      fiiHolding: getShareholdingPercent(rows, [
+        "Foreign Portfolio Investors",
+        "Foreign Institutional Investors",
+      ]),
+      diiHolding: getShareholdingPercent(rows, ["Domestic Institutional Investors"]),
+      publicHolding: getShareholdingPercent(rows, ["Public"]),
+      shareholderCount: null,
     }));
     const latest = holdingPeriods[holdingPeriods.length - 1];
-    const previous = holdingPeriods[holdingPeriods.length - 2];
     const latestPromoter =
       latest != null
-        ? getHolding(latest.rows, "Promoter & Promoter Group")
+        ? getShareholdingPercent(latest.rows, ["Promoter & Promoter Group"])
         : null;
-    const previousPromoter =
-      previous != null
-        ? getHolding(previous.rows, "Promoter & Promoter Group")
-        : null;
-    const promoterHolding =
-      data.promoterHoldingPct ?? latestPromoter ?? null;
+    const promoterHolding = latestPromoter;
     const promoterPledged =
-      data.promoterPledgedPct ??
-      (latest != null
-        ? getHolding(latest.rows, "Shares pledged or otherwise encumbered")
-        : null);
+      latest != null
+        ? getShareholdingPercent(latest.rows, [
+            "Shares pledged or otherwise encumbered",
+            "Shares pledged or otherwise encumbered by promoters",
+          ])
+        : null;
     const institutionalHolding =
-      data.institutionalHoldingPct ??
-      (latest != null ? getHolding(latest.rows, "Institutional Investors") : null);
-    const publicHolding =
-      data.retailHoldingPct ??
-      (latest != null ? getHolding(latest.rows, "Public") : null);
+      latest != null
+        ? getShareholdingPercent(latest.rows, ["Institutional Investors"])
+        : null;
     const fiiHolding =
       latest != null
-        ? getHolding(latest.rows, "Foreign Portfolio Investors") ??
-          getHolding(latest.rows, "Foreign Institutional Investors")
+        ? getShareholdingPercent(latest.rows, [
+            "Foreign Portfolio Investors",
+            "Foreign Institutional Investors",
+          ])
         : null;
     const diiHolding =
       latest != null
-        ? getHolding(latest.rows, "Domestic Institutional Investors")
+        ? getShareholdingPercent(latest.rows, ["Domestic Institutional Investors"])
         : null;
-    const quarterlyChange =
-      data.promoterChange ??
-      (latestPromoter != null && previousPromoter != null
-        ? latestPromoter - previousPromoter
-        : null);
+    const publicHolding =
+      latest != null
+        ? getShareholdingPercent(latest.rows, ["Public"])
+        : null;
+    const quarterlyChange = getQuarterlyShareholdingChange(
+      holdingPeriods,
+      ["Promoter & Promoter Group"],
+    );
     return NextResponse.json({
       symbol: nseSymbol,
       promoterHolding,
@@ -123,8 +93,8 @@ export async function GET(
       diiHolding,
       publicHolding,
       quarterlyChange,
-      quarter: data.qtrName ?? latest?.date ?? null,
-      source: "NSE India",
+      quarter: latest?.date ?? null,
+      source: "NSE India shareholding pattern",
       periods,
     });
   } catch (error) {

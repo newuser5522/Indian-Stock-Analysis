@@ -2,10 +2,6 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Cell,
-} from "recharts";
 import { ArrowDown, ArrowUp, Globe2, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/api-url";
@@ -73,13 +69,6 @@ interface HeatmapData {
   industries: HeatmapIndustry[];
 }
 
-const QUADRANT_COLOR: Record<string, string> = {
-  Leading: "#22c55e",
-  Weakening: "#f59e0b",
-  Lagging: "#ef4444",
-  Improving: "#22d3ee",
-};
-
 const QUADRANT_BG: Record<string, string> = {
   Leading: "bg-green-500/10 text-green-500",
   Weakening: "bg-amber-500/10 text-amber-500",
@@ -87,7 +76,7 @@ const QUADRANT_BG: Record<string, string> = {
   Improving: "bg-cyan-500/10 text-cyan-500",
 };
 
-const TABS = ["Heatmap", "RRG Chart", "Sector Performance", "Indices"] as const;
+const TABS = ["Heatmap", "Industry Matrix", "Sector Performance", "Indices"] as const;
 type Tab = (typeof TABS)[number];
 type IndustrySortMetric = "1D" | "1W" | "1M" | "3M";
 type IndustrySortDirection = "asc" | "desc";
@@ -256,72 +245,6 @@ function IndustryOverviewRow({
   );
 }
 
-function IndustryRRGDot(props: {
-  cx?: number;
-  cy?: number;
-  payload?: IndustryRrgPoint;
-  selectedIndustry: string;
-  onSelect: (industry: string) => void;
-}) {
-  const { cx = 0, cy = 0, payload } = props;
-  if (!payload?.quadrant) return null;
-  const color = QUADRANT_COLOR[payload.quadrant];
-  const selected = payload.industry === props.selectedIndustry;
-  const radius = 15;
-  return (
-    <g
-      role="button"
-      tabIndex={0}
-      aria-label={`Show ${payload.industry} stocks and performance`}
-      style={{ cursor: "pointer" }}
-      onClick={() => props.onSelect(payload.industry)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          props.onSelect(payload.industry);
-        }
-      }}
-    >
-      {selected && (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius + 4}
-          fill="none"
-          stroke="white"
-          strokeOpacity={0.9}
-          strokeWidth={2}
-        />
-      )}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill={color}
-        fillOpacity={selected ? 1 : 0.88}
-        stroke="white"
-        strokeOpacity={0.65}
-        strokeWidth={1.5}
-      />
-      <text
-        x={cx}
-        y={cy}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="white"
-        fontSize={payload.industry.length > 10 ? 5 : 6}
-        fontWeight={700}
-        textLength={Math.min(26, Math.max(14, payload.industry.length * 3))}
-        lengthAdjust="spacingAndGlyphs"
-        pointerEvents="none"
-      >
-        {payload.industry}
-      </text>
-      <title>{`Open ${payload.industry} in the performance matrix`}</title>
-    </g>
-  );
-}
-
 export default function SectorsPage() {
   const [tab, setTab] = useState<Tab>("Heatmap");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -331,10 +254,6 @@ export default function SectorsPage() {
   const [industrySortDirection, setIndustrySortDirection] = useState<IndustrySortDirection>("desc");
   const [matrixSignalFilter, setMatrixSignalFilter] = useState("All signals");
   const [expandedMatrixIndustry, setExpandedMatrixIndustry] = useState<string | null>(null);
-  const [selectedRrgIndustry, setSelectedRrgIndustry] = useState("All industries");
-  const [rrgQuadrantFilter, setRrgQuadrantFilter] = useState<
-    "All" | IndustryRrgPoint["quadrant"]
-  >("All");
 
   const { data: indices = [], isLoading: indicesLoading, isError: indicesError } = useQuery<SectorIndex[]>({
     queryKey: ["market", "sector-indices"],
@@ -369,7 +288,7 @@ export default function SectorsPage() {
     },
     staleTime: 15 * 60 * 1000,
     enabled:
-      tab === "RRG Chart" ||
+      tab === "Industry Matrix" ||
       (tab === "Heatmap" && industrySortMetric !== "1D"),
   });
 
@@ -402,23 +321,6 @@ export default function SectorsPage() {
   const industryRrgPoints = industryRrg.filter(
     (point): point is IndustryRrgPoint & { rsRatio: number; rsMomentum: number; quadrant: NonNullable<IndustryRrgPoint["quadrant"]> } =>
       point.rsRatio != null && point.rsMomentum != null && point.quadrant != null,
-  );
-  const unavailableRrgIndustries = industryRrg.filter(
-    (point) => point.rsRatio == null || point.rsMomentum == null || point.quadrant == null,
-  );
-  const visibleRrgPoints = industryRrgPoints.filter(
-    (point) =>
-      rrgQuadrantFilter === "All" || point.quadrant === rrgQuadrantFilter,
-  );
-  const selectedRrgPoint = industryRrgPoints.find(
-    (point) => point.industry === selectedRrgIndustry,
-  );
-  const industryQuadrantCounts = industryRrgPoints.reduce(
-    (counts, point) => {
-      counts[point.quadrant]++;
-      return counts;
-    },
-    { Leading: 0, Weakening: 0, Improving: 0, Lagging: 0 },
   );
   const industries = useMemo(() => heatmap?.industries ?? [], [heatmap?.industries]);
   const sectors = useMemo(
@@ -522,12 +424,6 @@ export default function SectorsPage() {
       }
       return n;
     });
-
-  const selectRrgIndustry = (industry: string) => {
-    setSelectedRrgIndustry(industry);
-    setExpandedMatrixIndustry(industry);
-    setMatrixSignalFilter("All signals");
-  };
 
   useEffect(() => {
     if (!expandedMatrixIndustry) return;
@@ -688,162 +584,18 @@ export default function SectorsPage() {
         </div>
       )}
 
-      {/* RRG Chart tab */}
-      {tab === "RRG Chart" && (
+      {/* Industry Matrix tab */}
+      {tab === "Industry Matrix" && (
         <div className="space-y-4">
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-              <div>
-                <h2 className="font-semibold">Industry Relative Rotation Graph</h2>
-                <p className="text-xs text-muted-foreground">
-                  All NSE industries vs NIFTY 50 · up to 3 largest listings per industry, market-cap-weighted where available
-                </p>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                {Object.entries(QUADRANT_COLOR).map(([q, c]) => (
-                  <span key={q} className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c }} />
-                    {q}
-                  </span>
-                ))}
-              </div>
-            </div>
-            {industryRrgLoading ? (
-              <div className="h-80 animate-pulse bg-accent/40 rounded-lg mt-4" />
-            ) : industryRrgError ? (
-              <div role="alert" className="p-8 text-center text-sm text-amber-500">
-                Live industry history is unavailable. Please try again later.
-              </div>
-            ) : industryRrgPoints.length === 0 ? (
-              <div className="flex h-80 items-center justify-center text-sm text-muted-foreground">
-                No industries have enough live history to plot.
-              </div>
-            ) : (
-              <div>
-                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="mr-1 text-xs text-muted-foreground">Quadrant</span>
-                    {(["All", "Leading", "Weakening", "Improving", "Lagging"] as const).map((quadrant) => {
-                      const count = quadrant === "All"
-                        ? industryRrgPoints.length
-                        : industryQuadrantCounts[quadrant];
-                      const active = rrgQuadrantFilter === quadrant;
-                      return (
-                        <button
-                          key={quadrant}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => setRrgQuadrantFilter(quadrant)}
-                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                            active
-                              ? "border-primary/50 bg-primary/10 text-foreground"
-                              : "border-border text-muted-foreground hover:bg-accent"
-                          }`}
-                        >
-                          {quadrant} <span className="tabular-nums">{count}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    Highlight
-                    <Select value={selectedRrgIndustry} onValueChange={setSelectedRrgIndustry}>
-                      <SelectTrigger className="h-8 w-52">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="All industries">None</SelectItem>
-                        {industryRrgPoints.map((point) => (
-                          <SelectItem key={point.industry} value={point.industry}>
-                            {point.industry}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                </div>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Showing {visibleRrgPoints.length} of {industryRrgPoints.length} industries with sufficient history. Select a bubble to expand its stocks in the matrix below.
-                </p>
-                <ResponsiveContainer width="100%" height={440}>
-                <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(217,33%,17%)" opacity={0.5} />
-                  <XAxis type="number" dataKey="rsRatio" name="RS-Ratio" domain={["auto", "auto"]}
-                    tick={{ fontSize: 10, fill: "hsl(215,20%,55%)" }} tickLine={false} label={{ value: "RS-Ratio", position: "insideBottom", offset: -10, fontSize: 11, fill: "hsl(215,20%,55%)" }} />
-                  <YAxis type="number" dataKey="rsMomentum" name="RS-Momentum" domain={["auto", "auto"]}
-                    tick={{ fontSize: 10, fill: "hsl(215,20%,55%)" }} tickLine={false} label={{ value: "RS-Momentum", angle: -90, position: "insideLeft", offset: 15, fontSize: 11, fill: "hsl(215,20%,55%)" }} />
-                  <ReferenceLine x={100} stroke="hsl(217,33%,25%)" strokeDasharray="4 4" strokeWidth={1.5} />
-                  <ReferenceLine y={100} stroke="hsl(217,33%,25%)" strokeDasharray="4 4" strokeWidth={1.5} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "hsl(222,47%,10%)", border: "1px solid hsl(217,33%,17%)", borderRadius: 6, fontSize: 11 }}
-                    cursor={{ strokeDasharray: "3 3" }}
-                    content={({ payload }) => {
-                      if (!payload?.length) return null;
-                      const d = payload[0].payload as IndustryRrgPoint;
-                      if (d.rsRatio == null || d.rsMomentum == null) return null;
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-3 text-xs space-y-1">
-                          <div className="font-bold" style={{ color: d.quadrant ? QUADRANT_COLOR[d.quadrant] : undefined }}>{d.industry}</div>
-                          <div className="text-muted-foreground">{d.quadrant ?? "History unavailable"}</div>
-                          <div>{d.historyCount} representative stocks with history · {d.stockCount} stocks in group</div>
-                          <div>RS-Ratio: <span className="font-semibold">{d.rsRatio.toFixed(2)}</span></div>
-                          <div>RS-Momentum: <span className="font-semibold">{d.rsMomentum.toFixed(2)}</span></div>
-                          <div>1D: <span className={d.change1d == null ? "" : changeColor(d.change1d)}>{d.change1d == null ? "—" : `${d.change1d >= 0 ? "+" : ""}${d.change1d.toFixed(2)}%`}</span></div>
-                          <div>1M: <span className={d.change1m == null ? "" : changeColor(d.change1m)}>{d.change1m == null ? "—" : `${d.change1m >= 0 ? "+" : ""}${d.change1m.toFixed(2)}%`}</span></div>
-                          <div>3M: <span className={d.change3m == null ? "" : changeColor(d.change3m)}>{d.change3m == null ? "—" : `${d.change3m >= 0 ? "+" : ""}${d.change3m.toFixed(2)}%`}</span></div>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Scatter
-                    data={visibleRrgPoints}
-                    shape={
-                      <IndustryRRGDot
-                        selectedIndustry={selectedRrgIndustry}
-                        onSelect={selectRrgIndustry}
-                      />
-                    }
-                  >
-                    {visibleRrgPoints.map((entry) => (
-                      <Cell key={entry.industry} fill={QUADRANT_COLOR[entry.quadrant]} />
-                    ))}
-                  </Scatter>
-                  {/* Quadrant labels */}
-                </ScatterChart>
-              </ResponsiveContainer>
-                {selectedRrgPoint && (
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/20 px-3 py-2 text-xs">
-                    <span className="font-semibold">{selectedRrgPoint.industry}</span>
-                    <span className={`rounded px-1.5 py-0.5 font-medium ${QUADRANT_BG[selectedRrgPoint.quadrant]}`}>
-                      {selectedRrgPoint.quadrant}
-                    </span>
-                    <span className="text-muted-foreground">
-                      RS-Ratio <span className="font-mono text-foreground">{selectedRrgPoint.rsRatio.toFixed(2)}</span>
-                    </span>
-                    <span className="text-muted-foreground">
-                      RS-Momentum <span className="font-mono text-foreground">{selectedRrgPoint.rsMomentum.toFixed(2)}</span>
-                    </span>
-                  </div>
-                )}
-                {unavailableRrgIndustries.length > 0 && (
-                  <p className="mt-2 text-xs text-amber-500">
-                    Not plotted—insufficient three-month Yahoo history:{" "}
-                    {unavailableRrgIndustries.map((point) => point.industry).join(", ")}.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
           <section className="space-y-4 rounded-lg border bg-card p-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Industry Performance Matrix</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Recent NSE sessions · market-cap-weighted top three stocks per industry · 5D return and 14D momentum versus the 66D pace
+                  Recent Yahoo Finance daily history · market-cap-weighted top three stocks per industry · 5D return and 14D momentum versus the 66D pace
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Select an industry row or an RRG bubble to expand its stocks.
+                  Select an industry row to expand its stocks.
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-3">
@@ -935,7 +687,6 @@ export default function SectorsPage() {
                                 aria-controls={`industry-stocks-${encodeURIComponent(industry.industry)}`}
                                 onClick={() => {
                                   setExpandedMatrixIndustry(isExpanded ? null : industry.industry);
-                                  setSelectedRrgIndustry(isExpanded ? "All industries" : industry.industry);
                                 }}
                                 className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-accent/50"
                               >

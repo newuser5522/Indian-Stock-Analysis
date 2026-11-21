@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, eq, isDatabaseConfigured } from "@workspace/db";
+import { db, isDatabaseConfigured, sql } from "@workspace/db";
 import { portfolioTable } from "@workspace/db/schema";
 import {
   parsePortfolioId,
   validatePortfolioUpdate,
 } from "@/lib/portfolio-validation";
 import { readJsonBody, RequestBodyError } from "@/lib/request-body";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export async function DELETE(
   _req: NextRequest,
@@ -14,6 +15,8 @@ export async function DELETE(
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
+  const ownerId = await getCurrentUserId();
+  if (ownerId == null) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
   try {
     const { id } = await params;
@@ -21,7 +24,7 @@ export async function DELETE(
     if (numId == null) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     const [deleted] = await db
       .delete(portfolioTable)
-      .where(eq(portfolioTable.id, numId))
+      .where(sql`${portfolioTable.id} = ${numId} AND ${portfolioTable.ownerId} = ${ownerId}`)
       .returning({ id: portfolioTable.id });
     if (!deleted) return NextResponse.json({ error: "Holding not found" }, { status: 404 });
     return NextResponse.json({ success: true });
@@ -38,6 +41,8 @@ export async function PUT(
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
+  const ownerId = await getCurrentUserId();
+  if (ownerId == null) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
   try {
     const { id } = await params;
@@ -58,7 +63,7 @@ export async function PUT(
     const [updated] = await db
       .update(portfolioTable)
       .set(validation.value)
-      .where(eq(portfolioTable.id, numId))
+      .where(sql`${portfolioTable.id} = ${numId} AND ${portfolioTable.ownerId} = ${ownerId}`)
       .returning();
     if (!updated) return NextResponse.json({ error: "Holding not found" }, { status: 404 });
     return NextResponse.json(updated);

@@ -15,23 +15,13 @@ import { Input } from "@/components/ui/input";
 import { apiUrl } from "@/lib/api-url";
 import { formatPrice, displaySymbol } from "@/lib/format";
 import { toast } from "sonner";
-
-interface Alert {
-  id: string;
-  symbol: string;
-  condition: "above" | "below" | "change_pct_above" | "change_pct_below";
-  value: number;
-  createdAt: string;
-  triggered: boolean;
-  triggeredAt?: string;
-}
-
-interface StockQuote {
-  symbol: string;
-  regularMarketPrice?: number;
-  regularMarketChangePercent?: number;
-  shortName?: string;
-}
+import {
+  isStockAlertTriggered,
+  loadStockAlerts,
+  saveStockAlerts,
+  type StockAlert as Alert,
+  type StockAlertQuote as StockQuote,
+} from "@/lib/stock-alerts";
 
 const CONDITIONS = [
   { value: "above", label: "Price above ₹" },
@@ -39,37 +29,6 @@ const CONDITIONS = [
   { value: "change_pct_above", label: "% Change above %" },
   { value: "change_pct_below", label: "% Change below %" },
 ];
-
-function loadAlerts(): Alert[] {
-  try {
-    return JSON.parse(
-      localStorage.getItem("fintrack_alerts") ?? "[]",
-    ) as Alert[];
-  } catch {
-    return [];
-  }
-}
-function saveAlerts(alerts: Alert[]) {
-  localStorage.setItem("fintrack_alerts", JSON.stringify(alerts));
-}
-
-function checkAlert(alert: Alert, quote: StockQuote): boolean {
-  const price = quote.regularMarketPrice;
-  const pct = quote.regularMarketChangePercent;
-  if (price == null || !Number.isFinite(price) || price <= 0) return false;
-  switch (alert.condition) {
-    case "above":
-      return price >= alert.value;
-    case "below":
-      return price <= alert.value;
-    case "change_pct_above":
-      return pct != null && Number.isFinite(pct) && pct >= alert.value;
-    case "change_pct_below":
-      return pct != null && Number.isFinite(pct) && pct <= alert.value;
-    default:
-      return false;
-  }
-}
 
 function conditionLabel(a: Alert) {
   const map: Record<string, string> = {
@@ -83,6 +42,8 @@ function conditionLabel(a: Alert) {
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [storageKey, setStorageKey] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<
     { symbol: string; shortname: string }[]
@@ -90,10 +51,34 @@ export default function AlertsPage() {
   const [selectedSymbol, setSelectedSymbol] = useState("");
   const [condition, setCondition] = useState<Alert["condition"]>("above");
   const [value, setValue] = useState("");
+  const [notes, setNotes] = useState("");
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    setAlerts(loadAlerts());
+    let active = true;
+    fetch(apiUrl("/account/me"))
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "Could not load account");
+        return body as { user?: { id?: string } };
+      })
+      .then(({ user }) => {
+        if (!active || !user?.id) return;
+        const key = `fintrack_alerts:${user.id}`;
+        setStorageKey(key);
+        const saved = localStorage.getItem(key);
+        if (saved != null) {
+          setAlerts(loadStockAlerts(key));
+        } else if (user.id === "1") {
+          const legacy = loadStockAlerts("fintrack_alerts");
+          setAlerts(legacy);
+          if (legacy.length) saveStockAlerts(key, legacy);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) setAccountError(error instanceof Error ? error.message : "Could not load account");
+      });
+    return () => { active = false; };
   }, []);
 
   const symbols = [
@@ -130,7 +115,7 @@ export default function AlertsPage() {
       const updated = prev.map((alert) => {
         if (alert.triggered) return alert;
         const quote = quotes.find((q) => q.symbol === alert.symbol);
-        if (quote && checkAlert(alert, quote)) {
+        if (quote && isStockAlertTriggered(alert, quote)) {
           changed = true;
           toast.success(
             `Alert triggered: ${displaySymbol(alert.symbol)} — ${conditionLabel(alert)}`,
@@ -147,12 +132,12 @@ export default function AlertsPage() {
         return alert;
       });
       if (changed) {
-        saveAlerts(updated);
+        if (storageKey) saveStockAlerts(storageKey, updated);
         return updated;
       }
       return prev;
     });
-  }, [quotes]);
+  }, [quotes, storageKey]);
 
   useEffect(() => {
     checkAlerts();
@@ -174,6 +159,10 @@ export default function AlertsPage() {
   };
 
   const addAlert = () => {
+    if (!storageKey) {
+      toast.error("Account is still loading; please try again");
+      return;
+    }
     if (!selectedSymbol) {
       toast.error("Select a stock first");
       return;
@@ -188,29 +177,33 @@ export default function AlertsPage() {
       symbol: selectedSymbol,
       condition,
       value: v,
+      notes: notes.trim(),
       createdAt: new Date().toISOString(),
       triggered: false,
     };
     const updated = [alert, ...alerts];
     setAlerts(updated);
-    saveAlerts(updated);
+    saveStockAlerts(storageKey, updated);
     setSelectedSymbol("");
     setValue("");
+    setNotes("");
     setSearchQuery("");
     setSearchResults([]);
     toast.success("Alert created");
   };
 
   const removeAlert = (id: string) => {
+    if (!storageKey) return;
     const updated = alerts.filter((a) => a.id !== id);
     setAlerts(updated);
-    saveAlerts(updated);
+    saveStockAlerts(storageKey, updated);
   };
 
   const clearTriggered = () => {
+    if (!storageKey) return;
     const updated = alerts.filter((a) => !a.triggered);
     setAlerts(updated);
-    saveAlerts(updated);
+    saveStockAlerts(storageKey, updated);
   };
 
   const active = alerts.filter((a) => !a.triggered);
@@ -234,6 +227,12 @@ export default function AlertsPage() {
           <Button variant="secondary" size="sm" onClick={clearTriggered}>
             Clear {triggered.length} triggered
           </Button>
+        )}
+
+        {accountError && (
+          <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+            {accountError}
+          </div>
         )}
       </div>
 
@@ -327,6 +326,20 @@ export default function AlertsPage() {
               Create Alert
             </Button>
           </div>
+          <div className="max-w-xl space-y-1">
+            <label htmlFor="alert-notes" className="text-xs font-semibold text-muted-foreground">
+              Why are you creating this alert? <span className="font-normal">(optional)</span>
+            </label>
+            <textarea
+              id="alert-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Add a reminder or investment thesis…"
+              className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
+            />
+          </div>
         </div>
       </div>
 
@@ -374,6 +387,9 @@ export default function AlertsPage() {
                         </span>
                       )}
                     </div>
+                    {alert.notes && (
+                      <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{alert.notes}</p>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground shrink-0">
                     {new Date(alert.createdAt).toLocaleDateString("en-IN")}
@@ -422,6 +438,9 @@ export default function AlertsPage() {
                       Triggered at{" "}
                       {new Date(alert.triggeredAt).toLocaleString("en-IN")}
                     </div>
+                  )}
+                  {alert.notes && (
+                    <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{alert.notes}</p>
                   )}
                 </div>
                 <Button

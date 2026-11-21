@@ -615,6 +615,8 @@ export default function StockPage() {
           ))}
           <Link
             href={`/chart?symbol=${encodeURIComponent(rawSymbol.replace(/\.(NS|BO)$/i, ""))}&exchange=${/\.BO$/i.test(rawSymbol) ? "BSE" : "NSE"}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent"
           >
             <BarChart3 className="h-3.5 w-3.5" />

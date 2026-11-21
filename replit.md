@@ -8,24 +8,37 @@ A full-stack Next.js 15 App Router app for Indian stock market analytics. Covers
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL`, `AUTH_SECRET` — PostgreSQL connection and Auth.js secret
+- Password reset email: `RESEND_API_KEY`, `AUTH_EMAIL_FROM`; optional `AUTH_URL` public origin
 
-### Deploy to Netlify
+### Deploy to Vercel
 
-Connect the repository to Netlify with the repository root as the base directory.
-The root `netlify.toml` builds the Next.js screener workspace and enables Netlify's
-Next.js runtime for its server-rendered pages and API routes. Do not set the base
-directory to `artifacts/nextjs-screener`; the app depends on workspace packages at
-the repository root.
+Import this repository into Vercel as a pnpm monorepo. Set the project **Root
+Directory** to `artifacts/nextjs-screener`, keep the **Next.js** framework preset,
+and enable **Include source files outside of the Root Directory in the Build Step**
+so the app can import the `lib/db` workspace package. Use Node.js 24. Let Vercel
+detect the pnpm workspace and Next.js build; no Netlify build plugin or custom
+output directory is needed.
 
-Set `DATABASE_URL` in Netlify's production environment to a reachable, persistent
-PostgreSQL database, then apply the Drizzle schema with
-`pnpm --filter @workspace/db run push` using that database URL. The local
-`.env.local` file and local development database are not deployed to Netlify.
+Configure these values in Vercel Project Settings → Environment Variables (Production
+and Preview as appropriate): `DATABASE_URL`, `AUTH_SECRET`, `AUTH_ADMIN_EMAIL`,
+`AUTH_ADMIN_PASSWORD`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM`, `AUTH_URL`,
+`UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN`. Use a reachable persistent
+PostgreSQL database and shared Upstash Redis instance. Set `AUTH_URL` to the deployed
+app's canonical origin. Do not commit credentials or copy local `.env.local` files to
+Vercel.
+
+Before enabling public signup, configure the admin email and password. The signup
+route creates that owner first so existing records owned by user 1 cannot be claimed
+by the first public registrant. Run `npx pnpm@11.21.0 --filter @workspace/db run push`
+once against the intended database from a trusted environment before serving traffic;
+do not run schema push as part of every Vercel build. Vercel documentation:
+[monorepos](https://vercel.com/docs/monorepos) and
+[monorepo FAQ](https://vercel.com/docs/monorepos/monorepo-faq).
 
 ### Configure PostgreSQL for Watchlist and Portfolio
 
-The watchlist and portfolio are stored in PostgreSQL. Create a PostgreSQL database,
+User accounts, watchlists, portfolios, and password reset tokens are stored in PostgreSQL. Create a PostgreSQL database,
 then set `DATABASE_URL` in the environment used to start the Next.js server. Do not
 commit the connection string to source control.
 
@@ -47,7 +60,7 @@ server environment and run the schema push as a deployment step. Watchlist and
 Portfolio APIs return HTTP 503 when the variable is missing.
 
 For this Windows development environment, a local PostgreSQL cluster is provisioned
-under `%LOCALAPPDATA%\FinTrack\postgres-data`, bound to `127.0.0.1:5433`. Its
+under `%LOCALAPPDATA%\FinTrack\postgres-data`, bound to `127.0.0.1:55432`. Its
 connection string is stored in the ignored
 `artifacts/nextjs-screener/.env.local`; the Drizzle schema has already been pushed.
 After a machine restart, start the database before the app if it is not already
@@ -56,12 +69,13 @@ running:
 ```powershell
 $pgctl = "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe"
 & $pgctl -D "$env:LOCALAPPDATA\FinTrack\postgres-data" status
-& $pgctl -D "$env:LOCALAPPDATA\FinTrack\postgres-data" -l "$env:LOCALAPPDATA\FinTrack\postgres.log" start
+& $pgctl -D "$env:LOCALAPPDATA\FinTrack\postgres-data" -l "$env:LOCALAPPDATA\FinTrack\postgres.log" -o "-p 55432" start
 pnpm --filter @workspace/nextjs-screener run dev
 ```
 
 The database uses a separate cluster and port from any PostgreSQL service already
-installed on the machine.
+installed on the machine. New accounts can register at `/signup`; password reset links
+are sent through Resend when its environment variables are configured.
 
 ## Stack
 
@@ -69,9 +83,9 @@ installed on the machine.
 - **Next.js 15** App Router (primary app at `/`)
 - DB: PostgreSQL + Drizzle ORM (`@workspace/db`)
 - Styling: Tailwind CSS v4 + shadcn/ui components
-- Charts: Recharts (price + RSI charts)
+- Charts: Recharts (price + RSI charts) plus the custom interactive chart
 - Data fetching: React Query (@tanstack/react-query)
-- Data sources: Yahoo Finance API + NSE India API
+- Data sources: Yahoo Finance API + Nifty Indices, BSE, and NSE history APIs (system `curl` HTTP/1.1 fallback for NSE) + MFAPI.in for mutual-fund NAV history
 
 ## Where things live
 
@@ -80,9 +94,11 @@ artifacts/nextjs-screener/
   src/
     app/                          # Next.js App Router pages
       page.tsx                    # Market overview (indices + movers)
+      chart/page.tsx              # Interactive chart with drawing tools and chart-only theme toggle
       screener/page.tsx           # Stock screener with filters
       watchlist/page.tsx          # Watchlist management
-      portfolio/page.tsx          # Portfolio tracker
+      portfolio/page.tsx          # Multiple portfolio sections, holdings, CAGR, news, risk
+      mutual-funds/page.tsx       # Mutual-fund search and NAV comparison
       alerts/page.tsx             # Price alerts (localStorage-backed)
       scans/page.tsx              # Pre-built market scans
       query/page.tsx              # Custom query screener
@@ -108,6 +124,8 @@ artifacts/nextjs-screener/
           most-active/            # Most active by volume
           bulk-deals/             # NSE bulk deal archives
           market-breadth/         # A/D ratio + EMA + 52W metrics
+          index-analytics/        # Historical benchmark and index analytics
+          mutual-funds/           # MFAPI.in search, history, and latest NAV
           industry-rotation/      # Sector RRG + rotation data
           futures-dashboard/      # Option chain PCR + OI profile
           corporate-filings/      # NSE corporate announcements
@@ -119,7 +137,6 @@ artifacts/nextjs-screener/
     lib/
       yahoo-finance.ts       # Yahoo Finance + NSE India API client
       nse.ts                 # NSE India session helper (cookie + fetchNseApi)
-      stock-list.ts          # 109 NSE stocks + index symbols + sectors
       cache.ts               # Simple in-memory TTL cache
       format.ts              # Price/change/volume formatters
       api-url.ts             # Client-side URL helper (uses NEXT_PUBLIC_BASE_PATH)
@@ -174,8 +191,10 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 ### Portfolio & Tools
 - **Stock Detail**: Live price, OHLCV stats, five years of daily chart history, dividend/split history, 52-week range, RSI(14), and fundamentals
 - **Watchlist**: PostgreSQL-backed; search + add stocks, remove stocks, live price updates
-- **Portfolio**: Holdings tracker with P&L
-- **Alerts**: Price alerts (localStorage-backed, browser-side polling)
+- **Portfolio**: PostgreSQL-backed named portfolios with editable holdings, cash-flow-adjusted annualized return, risk analytics, allocation, and holding news
+- **Mutual Funds**: MFAPI.in search and NAV comparison; portfolio fund positions use the MFAPI scheme code as the symbol and `MF` as the exchange
+- **Charts**: Interactive in-app chart with drawing tools, indicators, crosshair labels, export, and a persisted chart-only light/dark switch
+- **Alerts**: Price alerts with optional notes (localStorage-backed, browser-side polling)
 - **News**: Market news feed
 - **Calendar**: Economic and earnings calendar
 
@@ -184,6 +203,7 @@ lib/db/src/schema/watchlist.ts  # PostgreSQL watchlist schema
 - Personal use only — no auth required
 - Dark navy theme throughout
 - NSE/BSE data via Yahoo Finance + NSE India APIs (no paid API keys)
+- Mutual-fund NAV data via MFAPI.in (public API, no API key)
 
 ## Gotchas
 

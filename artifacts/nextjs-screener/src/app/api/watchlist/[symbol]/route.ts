@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, eq, isDatabaseConfigured } from "@workspace/db";
+import { db, isDatabaseConfigured, sql } from "@workspace/db";
 import { watchlistTable } from "@workspace/db";
 import { getWatchlistDatabaseError } from "@/lib/watchlist-db-error";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,8 @@ export async function DELETE(
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
+  const ownerId = await getCurrentUserId();
+  if (ownerId == null) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
   try {
     const { symbol } = await params;
@@ -20,7 +23,7 @@ export async function DELETE(
     }
     const [deleted] = await db
       .delete(watchlistTable)
-      .where(eq(watchlistTable.symbol, symbol.trim().toUpperCase()))
+      .where(sql`${watchlistTable.symbol} = ${symbol.trim().toUpperCase()} AND ${watchlistTable.ownerId} = ${ownerId}`)
       .returning({ symbol: watchlistTable.symbol });
     if (!deleted) return NextResponse.json({ error: "Watchlist item not found" }, { status: 404 });
     return NextResponse.json({ success: true });

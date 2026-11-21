@@ -344,3 +344,85 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+.chart-shell {
+  --chart-grid: #c8cbd0;
+  --chart-crosshair: #a6acb5;
+  --chart-accent: #292b30;
+  --chart-label-text: #f6f7f9;
+  --chart-bg-surface: #17181a;
+}
+
+.chart-shell[data-chart-theme="light"] {
+  --chart-grid: #64748b;
+  --chart-crosshair: #334155;
+  --chart-accent: #1d4ed8;
+  --chart-label-text: #ffffff;
+  --chart-bg-surface: #ffffff;
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #172033 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="bg-[#0f0f10]"] {
+  background-color: #f8fafc !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="bg-[#111214]"] {
+  background-color: #f1f5f9 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="bg-[#17181a]"] {
+  background-color: #ffffff !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="bg-[#212326]"] {
+  background-color: #eef2f7 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="bg-[#24262a]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#292b30]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#2b2d31]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#2e3035]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#1d1e20]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#33363b]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#41444a]"],
+.chart-shell[data-chart-theme="light"] [class*="bg-[#44464b]"] {
+  background-color: #e2e8f0 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="border-[#26272a]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#292a2d]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#303135]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#34363a]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#45474c]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#33363b]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#41444a]"],
+.chart-shell[data-chart-theme="light"] [class*="border-[#44464b]"] {
+  border-color: #cbd5e1 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="text-[#f6f7f9]"],
+.chart-shell[data-chart-theme="light"] [class*="text-white"] {
+  color: #172033 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="text-[#c2c5cb]"],
+.chart-shell[data-chart-theme="light"] [class*="text-[#b8bbc2]"] {
+  color: #334155 !important;
+}
+
+.chart-shell[data-chart-theme="light"] [class*="text-[#a6acb5]"],
+.chart-shell[data-chart-theme="light"] [class*="text-[#9298a2]"],
+.chart-shell[data-chart-theme="light"] [class*="text-[#8b9099]"],
+.chart-shell[data-chart-theme="light"] [class*="text-[#858a93]"] {
+  color: #475569 !important;
+}
+
+.chart-shell[data-chart-theme="light"] svg text[fill="#f6f7f9"],
+.chart-shell[data-chart-theme="light"] svg text[fill="#b8bbc2"],
+.chart-shell[data-chart-theme="light"] svg text[fill="#9298a2"],
+.chart-shell[data-chart-theme="light"] svg text[fill="#8b9099"],
+.chart-shell[data-chart-theme="light"] svg text[fill="#858a93"] {
+  fill: #334155 !important;
+}

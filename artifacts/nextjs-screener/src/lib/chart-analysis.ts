@@ -306,7 +306,10 @@ function calcParabolicSar(bars: OhlcvBar[]): (number | null)[] {
 
 export const INDICATORS = [
   { id: "ma", label: "MA (Moving Average)", group: "Main" },
-  { id: "ema", label: "EMA (Exponential Moving Average)", group: "Main" },
+  { id: "ema20", label: "EMA 20", group: "Main" },
+  { id: "ema50", label: "EMA 50", group: "Main" },
+  { id: "ema100", label: "EMA 100", group: "Main" },
+  { id: "ema200", label: "EMA 200", group: "Main" },
   { id: "sma", label: "SMA (Simple Moving Average)", group: "Main" },
   { id: "boll", label: "BOLL (Bollinger Bands)", group: "Main" },
   { id: "sar", label: "SAR (Stop And Reverse)", group: "Main" },
@@ -351,8 +354,14 @@ export function calculateIndicator(
     case "ma":
     case "sma":
       return sma(20);
-    case "ema":
+    case "ema20":
       return ema(20);
+    case "ema50":
+      return ema(50);
+    case "ema100":
+      return ema(100);
+    case "ema200":
+      return ema(200);
     case "boll": {
       const averages = sma(20);
       return averages.map((average, index) => {
@@ -527,6 +536,17 @@ export function calculateIndicatorComponents(
   bars: OhlcvBar[],
   indicator: IndicatorId,
 ): IndicatorComponent[] {
+  if (indicator === "rsi") {
+    const values = relativeStrengthIndex(bars.map((bar) => bar.close));
+    return [
+      { name: "RSI 14", values, color: "#a855f7" },
+      {
+        name: "RSI-based MA 14",
+        values: simpleMovingAverageNullable(values, 14),
+        color: "#facc15",
+      },
+    ];
+  }
   if (indicator === "macd") {
     const closes = bars.map((bar) => bar.close);
     const fast = exponentialMovingAverage(closes, 12);
@@ -536,7 +556,7 @@ export function calculateIndicatorComponents(
     );
     const signal = exponentialMovingAverageNullable(macd, 9);
     const histogram = macd.map((value, index) =>
-      value == null || signal[index] == null ? null : 2 * (value - signal[index]!),
+      value == null || signal[index] == null ? null : value - signal[index]!,
     );
     return [
       { name: "DIF", values: macd, color: "#f59e0b" },

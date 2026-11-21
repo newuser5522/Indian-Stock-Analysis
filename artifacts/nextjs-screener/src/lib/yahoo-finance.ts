@@ -1061,47 +1061,80 @@ export async function fetchHistory(
     volume: number;
   }[]
 > {
-  const url = `${YF_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${period}`;
-  const data = (await yfFetch(url)) as {
-    chart?: {
-      result?: {
-        timestamp?: number[];
-        indicators?: {
-          quote?: {
-            open?: (number | null)[];
-            high?: (number | null)[];
-            low?: (number | null)[];
-            close?: (number | null)[];
-            volume?: (number | null)[];
-          }[];
-          adjclose?: {
-            adjclose?: (number | null)[];
-          }[];
+  const normalizedSymbol = symbol.trim().replace(/\s+/g, "").toUpperCase();
+  if (!normalizedSymbol) throw new Error("A stock symbol is required for history.");
+
+  const failures: string[] = [];
+  for (const base of [YF_BASE, YF_BASE2]) {
+    try {
+      const url = `${base}/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}?interval=${interval}&range=${period}`;
+      const response = await upstreamFetch(url, { headers: HEADERS });
+      const data = (await response.json().catch(() => null)) as {
+        chart?: {
+          error?: { description?: string; code?: string } | null;
+          result?: {
+            timestamp?: number[];
+            indicators?: {
+              quote?: {
+                open?: (number | null)[];
+                high?: (number | null)[];
+                low?: (number | null)[];
+                close?: (number | null)[];
+                volume?: (number | null)[];
+              }[];
+              adjclose?: { adjclose?: (number | null)[] }[];
+            };
+          }[] | null;
         };
-      }[];
-    };
-  };
-  const result = data?.chart?.result?.[0];
-  if (!result) return [];
-  const timestamps = result.timestamp ?? [];
-  const quote = result.indicators?.quote?.[0] ?? {};
-  const adjustedCloses = result.indicators?.adjclose?.[0]?.adjclose ?? [];
-  return timestamps
-    .map((ts, i) => {
-      const adjustedClose = adjustedCloses[i];
-      return {
-        timestamp: ts,
-        open: quote.open?.[i] ?? 0,
-        high: quote.high?.[i] ?? 0,
-        low: quote.low?.[i] ?? 0,
-        close: quote.close?.[i] ?? 0,
-        ...(adjustedClose != null && adjustedClose > 0
-          ? { adjustedClose }
-          : {}),
-        volume: quote.volume?.[i] ?? 0,
-      };
-    })
-    .filter((c) => c.close > 0);
+      } | null;
+      if (!data) {
+        failures.push(
+          response.ok
+            ? "Yahoo Finance returned an invalid chart-history response."
+            : `Yahoo Finance history request failed (HTTP ${response.status}).`,
+        );
+        continue;
+      }
+      const upstreamError = data.chart?.error;
+      if (!response.ok || upstreamError) {
+        failures.push(
+          upstreamError?.description ??
+            `Yahoo Finance history request failed (HTTP ${response.status}).`,
+        );
+        continue;
+      }
+
+      const result = data.chart?.result?.[0];
+      if (!result) return [];
+      const timestamps = result.timestamp ?? [];
+      const quote = result.indicators?.quote?.[0] ?? {};
+      const adjustedCloses = result.indicators?.adjclose?.[0]?.adjclose ?? [];
+      return timestamps
+        .map((ts, i) => {
+          const adjustedClose = adjustedCloses[i];
+          return {
+            timestamp: ts,
+            open: quote.open?.[i] ?? 0,
+            high: quote.high?.[i] ?? 0,
+            low: quote.low?.[i] ?? 0,
+            close: quote.close?.[i] ?? 0,
+            ...(adjustedClose != null && adjustedClose > 0
+              ? { adjustedClose }
+              : {}),
+            volume: quote.volume?.[i] ?? 0,
+          };
+        })
+        .filter((c) => c.close > 0);
+    } catch (error) {
+      failures.push(
+        error instanceof Error ? error.message : "Yahoo Finance request failed.",
+      );
+    }
+  }
+
+  throw new Error(
+    `Yahoo Finance history failed for ${normalizedSymbol}: ${failures.join(" / ")}`,
+  );
 }
 
 export interface CorporateAction {
@@ -1307,7 +1340,7 @@ export const SECTOR_INDICES = [
   { symbol: "^CNXENERGY", name: "Nifty Energy", sector: "Energy" },
   { symbol: "^CNXINFRA", name: "Nifty Infra", sector: "Infrastructure" },
   { symbol: "^CNXREALTY", name: "Nifty Realty", sector: "Realty" },
-  { symbol: "^CNX100", name: "Nifty 100 (Midcap)", sector: "Midcap" },
+  { symbol: "^CNX100", name: "Nifty 100", sector: "Broad Market" },
   { symbol: "^CNXSC", name: "Nifty Smallcap", sector: "Smallcap" },
 ];
 

@@ -26,15 +26,15 @@ const FIELD_MAP: Record<string, NumericField> = {
   price: "price", close: "price", ltp: "price",
   change: "change_pct", change_pct: "change_pct", chg: "change_pct",
   volume: "volume", vol: "volume",
-  pe: "pe", p_e: "pe", trailing_pe: "pe",
+  pe: "pe", p_e: "pe", trailing_pe: "pe", price_to_earnings: "pe",
   forward_pe: "forward_pe", fwd_pe: "forward_pe",
-  pb: "pb", p_b: "pb", price_book: "pb",
-  market_cap: "market_cap", mcap: "market_cap", cap: "market_cap",
+  pb: "pb", p_b: "pb", price_book: "pb", price_to_book: "pb",
+  market_cap: "market_cap", mcap: "market_cap", cap: "market_cap", market_capitalization: "market_cap",
   eps: "eps", earnings: "eps",
   roe: "roe", return_on_equity: "roe",
-  div_yield: "div_yield", dividend: "div_yield", yield: "div_yield",
-  week52_high: "week52_high", high52: "week52_high",
-  week52_low: "week52_low", low52: "week52_low",
+  div_yield: "div_yield", dividend_yield: "div_yield", dividend: "div_yield", yield: "div_yield",
+  week52_high: "week52_high", high52: "week52_high", fifty_two_week_high: "week52_high",
+  week52_low: "week52_low", low52: "week52_low", fifty_two_week_low: "week52_low",
 };
 
 type Operator = "<" | ">" | "<=" | ">=" | "=" | "==" | "!=" | "<>";

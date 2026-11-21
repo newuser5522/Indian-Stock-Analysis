@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   },
   description:
     "Free NSE/BSE stock screener with live price data, fundamentals, RSI charts, sector analysis, watchlist, and portfolio tracker. Screen 100+ Indian stocks by P/E, P/B, market cap and more.",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+  },
   keywords: [
     "Indian stock screener",
     "NSE stock screener",

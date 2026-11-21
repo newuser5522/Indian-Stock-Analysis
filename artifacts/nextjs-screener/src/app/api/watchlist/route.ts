@@ -4,6 +4,7 @@ import { watchlistTable } from "@workspace/db";
 import { fetchQuotes } from "@/lib/yahoo-finance";
 import { getWatchlistDatabaseError } from "@/lib/watchlist-db-error";
 import { readJsonBody, RequestBodyError } from "@/lib/request-body";
+import { getCurrentUserId } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,13 @@ export async function GET() {
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
+  const ownerId = await getCurrentUserId();
+  if (ownerId == null) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
   try {
-    const rows = await db.select().from(watchlistTable).orderBy(watchlistTable.addedAt);
+    const rows = await db.select().from(watchlistTable)
+      .where(eq(watchlistTable.ownerId, ownerId))
+      .orderBy(watchlistTable.addedAt);
     const symbols = rows.map((r) => r.symbol);
     if (symbols.length === 0) return NextResponse.json([]);
 
@@ -32,7 +37,7 @@ export async function GET() {
       const [updated] = await db
         .update(watchlistTable)
         .set({ addedPrice: currentPrice })
-        .where(eq(watchlistTable.symbol, row.symbol))
+        .where(sql`${watchlistTable.symbol} = ${row.symbol} AND ${watchlistTable.ownerId} = ${ownerId}`)
         .returning({ addedPrice: watchlistTable.addedPrice });
       if (updated?.addedPrice != null) {
         backfilledPrices.set(row.symbol, updated.addedPrice);
@@ -74,6 +79,8 @@ export async function POST(req: NextRequest) {
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
+  const ownerId = await getCurrentUserId();
+  if (ownerId == null) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
   try {
     let body: unknown;
@@ -109,14 +116,14 @@ export async function POST(req: NextRequest) {
       const [existing] = await tx
         .select({ id: watchlistTable.id })
         .from(watchlistTable)
-        .where(eq(watchlistTable.symbol, symbol))
+        .where(sql`${watchlistTable.symbol} = ${symbol} AND ${watchlistTable.ownerId} = ${ownerId}`)
         .limit(1);
       if (existing) return "duplicate" as const;
-      const [{ total }] = await tx.select({ total: count() }).from(watchlistTable);
+      const [{ total }] = await tx.select({ total: count() }).from(watchlistTable).where(eq(watchlistTable.ownerId, ownerId));
       if (total >= 200) return "limit" as const;
       const [inserted] = await tx
         .insert(watchlistTable)
-        .values({ symbol, name: symbol, exchange: "NSE", addedPrice })
+        .values({ ownerId, symbol, name: symbol, exchange: "NSE", addedPrice })
         .onConflictDoNothing()
         .returning({ symbol: watchlistTable.symbol });
       return inserted ? "inserted" as const : "duplicate" as const;

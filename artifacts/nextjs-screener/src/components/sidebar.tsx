@@ -57,6 +57,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/watchlist", label: "Watchlist", icon: Star },
       { href: "/portfolio", label: "Portfolio", icon: Briefcase },
+      { href: "/mutual-funds", label: "Mutual Funds", icon: PieChart },
       { href: "/alerts", label: "Alerts", icon: Bell },
     ],
   },
@@ -78,16 +79,20 @@ function NavItem({
   icon: Icon,
   active,
   onClick,
+  openInNewTab = false,
 }: {
   href: string;
   label: string;
   icon: React.ElementType;
   active: boolean;
   onClick?: () => void;
+  openInNewTab?: boolean;
 }) {
   return (
     <Link
       href={href}
+      target={openInNewTab ? "_blank" : undefined}
+      rel={openInNewTab ? "noopener noreferrer" : undefined}
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
@@ -157,6 +162,7 @@ export function Sidebar() {
                     label={label}
                     icon={icon}
                     active={href === "/" ? pathname === "/" : (pathname ?? "").startsWith(href)}
+                    openInNewTab={href === "/chart"}
                     onClick={() => setOpen(false)}
                   />
                 ))}
