@@ -22,6 +22,7 @@ interface FilingRecord {
   company: string;
   category: string;
   subject: string;
+  summary: string;
   date: string;
   attachmentUrl: string | null;
 }
@@ -103,7 +104,7 @@ export default function CorporateFilingsPage() {
           Corporate Filings
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Latest NSE announcements and corporate disclosures
+          Latest NSE announcements. Summaries shorten the reported filing subject; open the attachment for full details.
         </p>
       </div>
 
@@ -215,8 +216,14 @@ export default function CorporateFilingsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-100">
-                      <div className="truncate text-sm" title={filing.subject}>
+                      <div className="text-sm" title={filing.subject}>
                         {filing.subject}
+                      </div>
+                      <div
+                        className="mt-1 text-xs text-muted-foreground line-clamp-2"
+                        title={filing.summary || "NSE did not provide a separate summary."}
+                      >
+                        {filing.summary || "NSE did not provide a separate summary."}
                       </div>
                     </TableCell>
                     <TableCell>

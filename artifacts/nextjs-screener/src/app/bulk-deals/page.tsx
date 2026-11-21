@@ -24,8 +24,8 @@ interface BulkDeal {
   name: string;
   clientName: string;
   dealType: "BUY" | "SELL" | string;
-  quantity: number;
-  price: number;
+  quantity: number | null;
+  price: number | null;
   remarks: string;
 }
 
@@ -213,10 +213,10 @@ export default function BulkDealsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatVolume(deal.quantity)}
+                    {deal.quantity == null ? "—" : formatVolume(deal.quantity)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatPrice(deal.price)}
+                    {deal.price == null ? "—" : formatPrice(deal.price)}
                   </TableCell>
                 </TableRow>
               ))}

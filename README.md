@@ -15,8 +15,8 @@ This file is the **story**, not the reference sheet.
 A personal-use, full-stack **Indian stock market screener and analytics dashboard**
 ("FinTrack" — dark navy theme) covering NSE/BSE equities, indices, sectors, gold ETFs,
 forex, and FII/DII institutional flows. Built with Next.js 15 App Router, PostgreSQL,
-and free Yahoo Finance / NSE India data sources. The app uses a single-owner Auth.js
-login; it is not configured for multiple user accounts.
+and free Yahoo Finance / NSE India data sources. Auth.js accounts support open
+registration; portfolio and watchlist data are scoped to the signed-in user.
 
 The workspace contains one product artifact:
 
@@ -24,13 +24,17 @@ The workspace contains one product artifact:
 
 The canvas preview service is infrastructure for visual mockups and is not a second product app.
 
-### Private deployment setup
+### Account and deployment setup
 
-The app is private by default. Configure these environment variables before starting it:
+Configure these environment variables before deployment:
 
 - `AUTH_SECRET`: a randomly generated secret (for example, `openssl rand -base64 32`).
-- `AUTH_ADMIN_EMAIL` and `AUTH_ADMIN_PASSWORD`: the one owner's login credentials. Use a
-  unique password stored in the host's secret manager, not in source control.
+- `AUTH_ADMIN_EMAIL` and `AUTH_ADMIN_PASSWORD`: required before public signup. This
+  account is provisioned first so existing user-1 data cannot be claimed by the first
+  public registrant.
+- `RESEND_API_KEY` and `AUTH_EMAIL_FROM`: required for password-reset delivery through
+  Resend. The sender must be verified with the provider.
+- `AUTH_URL`: optional public app origin used to construct password-reset links.
 - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`: a shared Upstash Redis
   database used for rate limiting in production. Local development uses a process-local
   limiter when these values are absent; production API requests return `503` until both
@@ -40,13 +44,25 @@ The app is private by default. Configure these environment variables before star
 - `DATABASE_SSL=true` when the database host requires verified TLS.
 - `DB_POOL_MAX`: optional database pool size (defaults to 5; maximum 50).
 
-The login protects the entire app and its API. This is intentionally a single-owner setup;
-do not share the owner credentials. If multiple people need separate portfolios/watchlists,
-add account provisioning and a user/owner column to both tables before enabling accounts.
+The login protects the app and its APIs. New users can sign up; portfolios and watchlists
+are private to each account. Apply the Drizzle schema after deploying schema changes.
+The signup and reset flows require a reachable PostgreSQL database; password reset also
+requires the email-provider variables above.
 When using a reverse proxy that supplies `x-forwarded-for`, set `TRUST_PROXY=true` only if
 that proxy replaces the header rather than passing client-supplied values through. The
 limiter otherwise uses provider-specific client-IP headers and safely falls back to one
 shared `unknown` bucket.
+
+### Vercel deployment
+
+Import the repository as a pnpm monorepo. Set Vercel's **Root Directory** to
+`artifacts/nextjs-screener`, use the **Next.js** framework preset, and enable **Include
+source files outside of the Root Directory in the Build Step** for the shared `lib/db`
+workspace package. Use Node.js 24 and allow Vercel to detect the pnpm workspace and
+Next.js build. Set the environment variables above in Vercel Project Settings. Apply
+schema changes once from a trusted environment with
+`npx pnpm@11.21.0 --filter @workspace/db run push`; do not run schema push in every
+deployment build. See Vercel's [monorepo guide](https://vercel.com/docs/monorepos).
 
 ---
 
@@ -62,7 +78,7 @@ shared `unknown` bucket.
 ### Phase 1 — Core 13 features (original scope)
 Built and verified working end-to-end:
 1. **Market Overview** — Nifty 50, Sensex, Bank Nifty, IT, Auto, Pharma index cards + top gainers/losers/most-active.
-2. **Stock Screener** — filter 109+ NSE stocks by exchange, sector, P/E, P/B, market cap; sortable.
+2. **Stock Screener** — filter the available live NSE/BSE equity universe by exchange, sector, P/E, P/B, and market cap; sortable.
 3. **Stock Detail** — live price, OHLCV stats, 52-week range, price chart with period selector.
 4. **RSI(14) chart** — computed client-side from OHLCV history.
 5. **Fundamentals panel** — analyst consensus, computed via Yahoo `quoteSummary` v10 (needs a session crumb).
@@ -83,9 +99,19 @@ Added on top of the working core:
 1. **Forex / USD-INR page** (`/forex`, `api/market/forex`) — 10 major currency pairs.
 2. **Gold ETFs by NSE** (`/gold-etf`, `api/market/gold-etf`) — live NSE gold ETF prices, 1M return, 52W range, volume, sparkline trend.
 3. **FII/DII activity** (`/fii-dii`, `api/market/fii-dii`) — Foreign/Domestic Institutional Investor daily net buy/sell flows, sourced from NSE India's `fiidiiTradeReact` endpoint.
-4. **Formula query screener** (`/query`, `api/screener/advanced`) — a `screener.in`-style screener where you write filter expressions against a 95–109-stock dataset, with 9 preset queries.
+4. **Formula query screener** (`/query`, `api/screener/advanced`) — write filter expressions against the live NSE equity dataset, with 9 preset queries.
 
 Sidebar was reorganized into groups: **Markets** (Market, Sectors, FII/DII, Forex/USD-INR, Gold ETFs), **Screener** (Screener, Query Screener, Scans), **Portfolio** (Watchlist, Portfolio, Alerts), **Research** (News, Calendar).
+
+### Chart workspaces
+
+The chart includes draggable price-axis panning, cursor-anchored price-axis zoom, and a
+percentage scale based on the first visible bar. Its side panel can show the signed-in
+watchlist and portfolio, place price alerts (shared with the Alerts page), and compare
+stocks by percentage return. A custom spread accepts `SYMBOL+SYMBOL` expressions and
+sums constituent OHLC values at matching provider timestamps; spread volume is not
+meaningful and is omitted. Spread highs/lows use each provider bar's reported extremes,
+which may have occurred at different moments.
 
 ### Phase 3 — Bug hunt and fixes (this session)
 After building the 4 new features, every page in the app was re-verified end-to-end
@@ -141,9 +167,10 @@ the affected page reports that live data could not be loaded.
 ### Phase 5 — EOD stock and index analytics
 - Stock detail now supports five years of daily history and a Corporate Actions tab
   for Yahoo Finance dividend and split events.
-- Added Index Analytics for daily close, period returns, five-year range, and drawdown
-  across six configured benchmarks. Daily history and analytics use a 12-hour
-  process-local cache; this is not durable EOD storage.
+- Added Index Analytics for daily close, period returns, five-year range, and drawdown.
+  The page lists broad NSE/BSE categories and reports analytics only when the configured
+  source has usable index history; unavailable values are not estimated. Data uses a
+  12-hour process-local cache, not durable EOD storage.
 - The stock screener can request both NSE and BSE listings. If one exchange source
   fails, it displays available results and a partial-coverage warning.
 - BSE announcements are not integrated: the official endpoint returned HTTP 403 in
@@ -197,8 +224,9 @@ re-investigating them:
 
 Not started yet — flagged here as a backlog for future sessions:
 
-- Persist portfolio/alerts to PostgreSQL (currently client-side/in-memory-only for
-  those two features, unlike the watchlist which is DB-backed).
+- Persist alerts and their notes to PostgreSQL (alerts currently remain in browser
+  localStorage, namespaced by signed-in account on each browser).
+- Add email verification and account-management controls.
 - Real push/email notifications for price alerts (currently just UI, no delivery
   mechanism).
 - Consider adding a durable shared cache for the full NSE equity feed to reduce

@@ -37,6 +37,10 @@ interface OptionChainResponse {
   };
 }
 
+interface OptionChainContractInfo {
+  expiryDates?: string[];
+}
+
 export interface OiStrike {
   strike: number;
   callOI: number;
@@ -70,18 +74,30 @@ export interface FuturesDashboard {
 }
 
 async function fetchFuturesData(symbol: "NIFTY" | "BANKNIFTY"): Promise<FuturesDashboard> {
-  const raw = await fetchNseApi<OptionChainResponse>(`option-chain-indices?symbol=${symbol}`);
+  const contractInfo = await fetchNseApi<OptionChainContractInfo>(
+    `option-chain-contract-info?symbol=${symbol}`,
+  );
+  const expiry = contractInfo.expiryDates?.find(
+    (date) => Date.parse(date) >= new Date().setHours(0, 0, 0, 0),
+  );
+  if (!expiry) {
+    throw new Error(`NSE returned no upcoming option-chain expiry for ${symbol}`);
+  }
+  const query = new URLSearchParams({
+    type: "Indices",
+    symbol,
+    expiry,
+  });
+  const raw = await fetchNseApi<OptionChainResponse>(
+    `option-chain-v3?${query}`,
+  );
 
   const rows = raw?.filtered?.data ?? [];
   const totalCallOI = raw?.filtered?.CE?.totOI ?? 0;
   const totalPutOI = raw?.filtered?.PE?.totOI ?? 0;
   const pcr = totalCallOI > 0 ? parseFloat((totalPutOI / totalCallOI).toFixed(3)) : 0;
   const spotPrice = raw?.records?.underlyingValue ?? 0;
-  const expiry =
-    raw?.records?.expiryDates?.find(
-      (date) => Date.parse(date) >= new Date().setHours(0, 0, 0, 0),
-    ) ?? "";
-  if (rows.length === 0 || spotPrice <= 0 || !expiry) {
+  if (rows.length === 0 || spotPrice <= 0) {
     throw new Error(`NSE returned incomplete ${symbol} option-chain data`);
   }
 

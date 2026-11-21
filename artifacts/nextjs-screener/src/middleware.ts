@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
+import authConfig from "@/auth.config";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
@@ -17,12 +18,19 @@ function getClientIp(request: Request): string {
   );
 }
 
+const { auth } = NextAuth(authConfig);
+
 export default auth(async (request) => {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
   if (isApi) {
-    const isAuthRoute = pathname.startsWith("/api/auth/");
+    const isPublicAccountRoute = [
+      "/api/account/signup",
+      "/api/account/forgot-password",
+      "/api/account/reset-password",
+    ].includes(pathname);
+    const isAuthRoute = pathname.startsWith("/api/auth/") || isPublicAccountRoute;
     if (!isAuthRoute && !request.auth) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
@@ -50,9 +58,14 @@ export default auth(async (request) => {
     try {
       const credentialsCallback =
         pathname === "/api/auth/callback/credentials";
+      const accountMutation = [
+        "/api/account/signup",
+        "/api/account/forgot-password",
+        "/api/account/reset-password",
+      ].includes(pathname);
       const result = await checkRateLimit(
-        `${credentialsCallback ? "auth" : "api"}:${getClientIp(request)}`,
-        credentialsCallback ? 10 : 120,
+        `${credentialsCallback ? "auth" : accountMutation ? "account" : "api"}:${getClientIp(request)}`,
+        credentialsCallback || accountMutation ? 10 : 120,
         60,
       );
       if (!result.configured) {
@@ -81,7 +94,8 @@ export default auth(async (request) => {
     return NextResponse.next();
   }
 
-  if (!request.auth) {
+  const isPublicPage = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname);
+  if (!request.auth && !isPublicPage) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("callbackUrl", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
@@ -91,5 +105,5 @@ export default auth(async (request) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|favicon.svg|robots.txt|opengraph.jpg|login).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|favicon.svg|robots.txt|opengraph.jpg).*)"],
 };

@@ -1,4 +1,5 @@
 export interface PortfolioInput {
+  portfolioId: number;
   symbol: string;
   name: string;
   exchange: string;
@@ -28,20 +29,31 @@ function isValidSymbol(value: unknown): value is string {
   );
 }
 
-function isPositiveFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
+function parseFinitePositiveNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    const numericValue = Number(trimmed);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+  return null;
 }
 
 function isValidQuantity(value: unknown): value is number {
-  return isPositiveFiniteNumber(value) && value <= 1_000_000_000_000;
+  const parsed = parseFinitePositiveNumber(value);
+  return parsed != null && parsed > 0 && parsed <= 1_000_000_000_000;
 }
 
 function isValidPrice(value: unknown): value is number {
-  return isPositiveFiniteNumber(value) && value <= 1_000_000_000;
+  const parsed = parseFinitePositiveNumber(value);
+  return parsed != null && parsed > 0 && parsed <= 1_000_000_000;
 }
 
 function isValidPurchaseDate(value: unknown): value is string | null {
-  if (value === null) return true;
+  if (value === null || value === "") return true;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
@@ -73,6 +85,14 @@ export function validatePortfolioInput(
   input: unknown,
 ): ValidationResult<PortfolioInput> {
   if (!isRecord(input)) return { error: "Request body must be an object" };
+  const portfolioId = input.portfolioId ?? 1;
+  if (
+    typeof portfolioId !== "number" ||
+    !Number.isSafeInteger(portfolioId) ||
+    portfolioId < 1
+  ) {
+    return { error: "portfolioId must be a positive integer" };
+  }
   if (!isValidSymbol(input.symbol)) {
     return { error: "symbol must be a valid stock symbol" };
   }
@@ -98,15 +118,19 @@ export function validatePortfolioInput(
   const notes = input.notes;
 
   const symbol = input.symbol.trim().toUpperCase();
+  const normalizedQuantity = parseFinitePositiveNumber(input.quantity) ?? 0;
+  const normalizedAvgPrice = parseFinitePositiveNumber(input.avgPrice) ?? 0;
+  const normalizedPurchaseDate = purchaseDate === "" ? null : typeof purchaseDate === "string" ? purchaseDate : null;
   return {
     value: {
+      portfolioId,
       symbol,
       name: typeof input.name === "string" ? input.name.trim() || symbol : symbol,
       exchange:
         typeof input.exchange === "string" ? input.exchange.trim() || "NSE" : "NSE",
-      quantity: input.quantity,
-      avgPrice: input.avgPrice,
-      purchaseDate: typeof purchaseDate === "string" ? purchaseDate : null,
+      quantity: normalizedQuantity,
+      avgPrice: normalizedAvgPrice,
+      purchaseDate: normalizedPurchaseDate,
       notes: typeof notes === "string" ? notes : null,
     },
   };
@@ -124,28 +148,31 @@ export function validatePortfolioUpdate(
 
   const update: PortfolioUpdate = {};
   if ("quantity" in input) {
-    if (!isValidQuantity(input.quantity)) {
+    const parsed = parseFinitePositiveNumber(input.quantity);
+    if (parsed == null || parsed <= 0 || parsed > 1_000_000_000_000) {
       return { error: "quantity must be positive and no greater than 1,000,000,000,000" };
     }
-    update.quantity = input.quantity;
+    update.quantity = parsed;
   }
   if ("avgPrice" in input) {
-    if (!isValidPrice(input.avgPrice)) {
+    const parsed = parseFinitePositiveNumber(input.avgPrice);
+    if (parsed == null || parsed <= 0 || parsed > 1_000_000_000) {
       return { error: "avgPrice must be positive and no greater than 1,000,000,000" };
     }
-    update.avgPrice = input.avgPrice;
+    update.avgPrice = parsed;
   }
   if ("purchaseDate" in input) {
-    if (!isValidPurchaseDate(input.purchaseDate)) {
+    const purchaseDateValue = input.purchaseDate;
+    if (purchaseDateValue !== null && purchaseDateValue !== undefined && purchaseDateValue !== "" && !isValidPurchaseDate(purchaseDateValue)) {
       return { error: "purchaseDate must be a valid YYYY-MM-DD date or null" };
     }
-    update.purchaseDate = input.purchaseDate;
+    update.purchaseDate = purchaseDateValue === "" ? null : purchaseDateValue ?? null;
   }
   if ("notes" in input) {
     if (!isOptionalText(input.notes, 2000)) {
       return { error: "notes must be 2000 characters or fewer" };
     }
-    update.notes = input.notes ?? null;
+    update.notes = input.notes === "" ? null : input.notes ?? null;
   }
   return { value: update };
 }

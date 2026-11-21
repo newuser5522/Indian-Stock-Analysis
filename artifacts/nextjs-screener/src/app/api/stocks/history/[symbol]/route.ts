@@ -10,10 +10,13 @@ export async function GET(
 ) {
   const { symbol } = await params;
   if (!symbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
+  const normalizedSymbol = symbol.trim().replace(/\s+/g, "").toUpperCase();
+  if (!normalizedSymbol) return NextResponse.json({ error: "symbol required" }, { status: 400 });
 
   const period = req.nextUrl.searchParams.get("period") ?? "1mo";
   const interval = req.nextUrl.searchParams.get("interval") ?? "1d";
   const supportedPeriods = new Set([
+    "1d",
     "5d",
     "1mo",
     "3mo",
@@ -48,25 +51,29 @@ export async function GET(
   }
 
   try {
-    const cacheKey = `stock:history:${symbol}:${period}:${interval}`;
+    const cacheKey = `stock:history:${normalizedSymbol}:${period}:${interval}`;
     const data = await cache.getOrSet(
       cacheKey,
-      () => fetchHistory(symbol, period, interval),
+      () => fetchHistory(normalizedSymbol, period, interval),
       interval === "1d" || interval === "1wk" || interval === "1mo"
         ? 12 * 60 * 60 * 1000
         : 60_000,
     );
     if (data.length === 0) {
       return NextResponse.json(
-        { error: "Historical stock data is temporarily unavailable" },
+        { error: `No historical stock data was returned for ${normalizedSymbol}.` },
         { status: 502 },
       );
     }
     return NextResponse.json(data);
   } catch (error) {
-    console.error(`Historical stock data is unavailable for ${symbol}`, error);
+    const reason =
+      error instanceof Error && error.message.trim()
+        ? error.message
+        : "Yahoo Finance did not provide a response.";
+    console.error(`Historical stock data is unavailable for ${normalizedSymbol}`, error);
     return NextResponse.json(
-      { error: "Historical stock data is temporarily unavailable" },
+      { error: `Historical stock data unavailable for ${normalizedSymbol}: ${reason}` },
       { status: 502 },
     );
   }

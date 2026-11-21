@@ -2,19 +2,19 @@ import { NextResponse } from "next/server";
 import { fetchNseApi } from "@/lib/nse";
 import { fetchIndianEquityScreenerQuotes } from "@/lib/yahoo-finance";
 import { cache } from "@/lib/cache";
+import {
+  getQuarterlyShareholdingChange,
+  getShareholdingPercent,
+  getShareholdingPeriods,
+  type ShareholdingRow,
+} from "@/lib/nse-shareholding";
 
 export const dynamic = "force-dynamic";
 
 interface NseTopCorpInfo {
   data?: NseTopCorpInfo;
-  promoterHoldingPct?: number;
-  promoterPledgedPct?: number;
-  institutionalHoldingPct?: number;
-  retailHoldingPct?: number;
-  promoterChange?: number;
-  qtrName?: string;
   shareholdings_patterns?: {
-    data?: Record<string, Record<string, string | number>[]>;
+    data?: Record<string, ShareholdingRow[]>;
   };
 }
 
@@ -28,37 +28,8 @@ export interface PromoterRecord {
   institutionalHolding: number | null;
   publicHolding: number | null;
   quarterlyChange: number | null;
-  trend: "buying" | "selling" | "neutral";
-}
-
-function numeric(value: unknown): number | null {
-  if (typeof value !== "number" && typeof value !== "string") return null;
-  const parsed = Number.parseFloat(String(value).replace(/,/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getHolding(
-  rows: Record<string, string | number>[],
-  key: string,
-): number | null {
-  for (const row of rows) {
-    const match = Object.entries(row).find(
-      ([label]) => label.trim().toLowerCase() === key.toLowerCase(),
-    );
-    if (match) return numeric(match[1]);
-  }
-  return null;
-}
-
-function getHoldingPeriods(data: NseTopCorpInfo) {
-  return Object.entries(data.shareholdings_patterns?.data ?? {})
-    .map(([date, rows]) => ({
-      date,
-      timestamp: Date.parse(date),
-      rows,
-    }))
-    .filter((period) => Number.isFinite(period.timestamp))
-    .sort((a, b) => a.timestamp - b.timestamp);
+  quarter: string;
+  trend: "increased" | "decreased" | "unchanged" | null;
 }
 
 // Fetch promoter holding data for a single stock from NSE
@@ -87,42 +58,37 @@ async function fetchPromoterActivity(): Promise<PromoterRecord[]> {
       topStocks.slice(index, index + 5).map(async (stock): Promise<PromoterRecord | null> => {
         const info = await fetchOnePromoterHolding(stock.symbol);
         if (!info) return null;
-        const periods = getHoldingPeriods(info);
+        const periods = getShareholdingPeriods(info.shareholdings_patterns?.data);
         const latest = periods[periods.length - 1];
-        const previous = periods[periods.length - 2];
         const latestPromoter = latest
-          ? getHolding(latest.rows, "Promoter & Promoter Group")
+          ? getShareholdingPercent(latest.rows, ["Promoter & Promoter Group"])
           : null;
-        const previousPromoter = previous
-          ? getHolding(previous.rows, "Promoter & Promoter Group")
-          : null;
-        const promoterHolding = info.promoterHoldingPct ?? latestPromoter;
-        if (promoterHolding == null) return null;
-        const change = info.promoterChange ?? (
-          latestPromoter != null && previousPromoter != null
-            ? latestPromoter - previousPromoter
-            : null
+        if (latestPromoter == null || latest == null) return null;
+        const change = getQuarterlyShareholdingChange(
+          periods,
+          ["Promoter & Promoter Group"],
         );
-        const trend: "buying" | "selling" | "neutral" =
-          change != null && change > 0.1 ? "buying"
-            : change != null && change < -0.1 ? "selling"
-              : "neutral";
+        const trend: "increased" | "decreased" | "unchanged" | null =
+          change == null ? null
+            : change > 0.1 ? "increased"
+              : change < -0.1 ? "decreased"
+                : "unchanged";
         return {
           symbol: stock.symbol,
           name: stock.longName ?? stock.shortName ?? stock.symbol,
           exchange: "NSE",
           sector: stock.sector ?? "Unclassified",
-          promoterHolding,
-          promoterPledged: info.promoterPledgedPct ?? (
-            latest ? getHolding(latest.rows, "Shares pledged or otherwise encumbered") : null
-          ),
-          institutionalHolding: info.institutionalHoldingPct ?? (
-            latest ? getHolding(latest.rows, "Institutional Investors") : null
-          ),
-          publicHolding: info.retailHoldingPct ?? (
-            latest ? getHolding(latest.rows, "Public") : null
-          ),
+          promoterHolding: latestPromoter,
+          promoterPledged: getShareholdingPercent(latest.rows, [
+            "Shares pledged or otherwise encumbered",
+            "Shares pledged or otherwise encumbered by promoters",
+          ]),
+          institutionalHolding: getShareholdingPercent(latest.rows, [
+            "Institutional Investors",
+          ]),
+          publicHolding: getShareholdingPercent(latest.rows, ["Public"]),
           quarterlyChange: change,
+          quarter: latest.date,
           trend,
         };
       }),

@@ -50,6 +50,18 @@ interface IndustryRotationSector {
   momentum: "accelerating" | "decelerating" | "stable" | null;
 }
 
+interface IndustryRrgPoint {
+  industry: string;
+  stockCount: number;
+  historyCount: number;
+  change1d: number | null;
+  change1m: number | null;
+  change3m: number | null;
+  rsRatio: number | null;
+  rsMomentum: number | null;
+  quadrant: "Leading" | "Weakening" | "Lagging" | "Improving" | null;
+}
+
 const QUADRANT_COLORS = {
   Leading: "#22c55e",
   Weakening: "#f59e0b",
@@ -72,15 +84,29 @@ export default function IndustryRotationPage() {
     staleTime: 3 * 60 * 1000,
   });
 
-  const leading = data.filter((d) => d.quadrant === "Leading").length;
-  const weakening = data.filter((d) => d.quadrant === "Weakening").length;
-  const lagging = data.filter((d) => d.quadrant === "Lagging").length;
-  const improving = data.filter((d) => d.quadrant === "Improving").length;
-  const chartData = data.filter(
-    (sector) =>
-      sector.rsRatio != null &&
-      sector.rsMomentum != null &&
-      sector.quadrant != null,
+  const {
+    data: rrgData = [],
+    isLoading: isRrgLoading,
+    isError: isRrgError,
+  } = useQuery<IndustryRrgPoint[]>({
+    queryKey: ["market", "industry-rrg"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/market/industry-rrg"));
+      if (!response.ok) throw new Error("Industry RRG request failed");
+      return response.json();
+    },
+    staleTime: 15 * 60 * 1000,
+  });
+
+  const leading = rrgData.filter((d) => d.quadrant === "Leading").length;
+  const weakening = rrgData.filter((d) => d.quadrant === "Weakening").length;
+  const lagging = rrgData.filter((d) => d.quadrant === "Lagging").length;
+  const improving = rrgData.filter((d) => d.quadrant === "Improving").length;
+  const chartData = rrgData.filter(
+    (industry) =>
+      industry.rsRatio != null &&
+      industry.rsMomentum != null &&
+      industry.quadrant != null,
   );
   const formatPercent = (value: number | null) =>
     value == null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
@@ -118,26 +144,29 @@ export default function IndustryRotationPage() {
 
       <Tabs defaultValue="chart">
         <TabsList className="mb-4">
-          <TabsTrigger value="chart">Rotation Chart</TabsTrigger>
+          <TabsTrigger value="chart">Industry RRG</TabsTrigger>
           <TabsTrigger value="table">Sector Table</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chart" className="mt-0">
           <Card className="p-4">
-            {isLoading ? (
+            <p className="mb-3 text-xs text-muted-foreground">
+              Yahoo Finance daily price history compared with the NIFTY 50 proxy; up to three large stocks represent each industry. RS-Ratio and RS-Momentum are simplified relative-return proxies, not standardized RRG indicator values.
+            </p>
+            {isRrgLoading ? (
               <div className="h-31.25 flex items-center justify-center text-muted-foreground text-sm">
                 Loading...
               </div>
-            ) : isError ? (
+            ) : isRrgError ? (
               <div
                 role="alert"
                 className="h-31.25 flex items-center justify-center text-amber-500 text-sm"
               >
-                Live market data is unavailable. Please try again later.
+                Live industry history is unavailable. Please try again later.
               </div>
             ) : chartData.length === 0 ? (
               <div className="h-31.25 flex items-center justify-center text-muted-foreground text-sm">
-                Relative-strength history is unavailable for these sectors.
+                Relative-strength history is unavailable for these industries.
               </div>
             ) : (
               <div className="h-105 w-full relative">
@@ -201,12 +230,11 @@ export default function IndustryRotationPage() {
                       }}
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
-                          const d = payload[0]
-                            .payload as IndustryRotationSector;
+                          const d = payload[0].payload as IndustryRrgPoint;
                           return (
                             <div className="bg-card border border-border p-3 rounded-lg shadow-xl text-xs space-y-1">
                               <p className="font-bold text-base mb-1">
-                                {d.sector}
+                                {d.industry}
                               </p>
                               <p className="text-muted-foreground">
                                 Quadrant:{" "}
@@ -233,15 +261,10 @@ export default function IndustryRotationPage() {
                                   {d.rsMomentum?.toFixed(2) ?? "—"}
                                 </span>
                               </p>
-                              <p>
-                                1D Change:{" "}
-                                <span
-                                  className={`font-mono ${changeColor(d.avgChange1d)}`}
-                                >
-                                  {d.avgChange1d > 0 ? "+" : ""}
-                                  {d.avgChange1d.toFixed(2)}%
-                                </span>
-                              </p>
+                              <p>Representative-stock history: {d.historyCount} of {d.stockCount}</p>
+                              <p>1D Change: <span className={`font-mono ${d.change1d == null ? "" : changeColor(d.change1d)}`}>{formatPercent(d.change1d)}</span></p>
+                              <p>1M Change: <span className={`font-mono ${d.change1m == null ? "" : changeColor(d.change1m)}`}>{formatPercent(d.change1m)}</span></p>
+                              <p>3M Change: <span className={`font-mono ${d.change3m == null ? "" : changeColor(d.change3m)}`}>{formatPercent(d.change3m)}</span></p>
                             </div>
                           );
                         }
@@ -249,9 +272,9 @@ export default function IndustryRotationPage() {
                       }}
                     />
                     <Scatter data={chartData}>
-                      {chartData.map((entry, index) => (
+                      {chartData.map((entry) => (
                         <Cell
-                          key={`cell-${index}`}
+                          key={entry.industry}
                           fill={
                             entry.quadrant
                               ? QUADRANT_COLORS[entry.quadrant]

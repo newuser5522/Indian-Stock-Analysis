@@ -1,13 +1,19 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registered, setRegistered] = useState(false);
+
+  useEffect(() => {
+    setRegistered(new URLSearchParams(window.location.search).get("registered") === "1");
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,9 +52,10 @@ export default function LoginPage() {
         <div>
           <h1 className="text-xl font-semibold">Sign in to FinTrack</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            This private installation is restricted to its configured owner.
+            Sign in to view your private portfolios and watchlist.
           </p>
         </div>
+        {registered && <p role="status" className="text-sm text-green-500">Account created. You can now sign in.</p>}
         <label className="block space-y-1 text-sm">
           <span>Email</span>
           <input
@@ -79,6 +86,10 @@ export default function LoginPage() {
         >
           {isSubmitting ? "Signing in..." : "Sign in"}
         </button>
+        <div className="flex justify-between text-sm">
+          <Link href="/signup" className="text-primary hover:underline">Create account</Link>
+          <Link href="/forgot-password" className="text-primary hover:underline">Forgot password?</Link>
+        </div>
       </form>
     </main>
   );

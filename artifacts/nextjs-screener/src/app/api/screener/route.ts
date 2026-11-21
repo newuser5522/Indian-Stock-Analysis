@@ -11,6 +11,22 @@ import { fetchScreenerFundamentals } from "@/lib/screener-fundamentals";
 export const dynamic = "force-dynamic";
 
 type ScreenerRow = YFQuote & { exchange: string; name: string };
+type ScreenerResponse = Pick<
+  YFQuote,
+  | "symbol"
+  | "regularMarketPrice"
+  | "regularMarketChangePercent"
+  | "regularMarketVolume"
+  | "marketCap"
+  | "trailingPE"
+  | "priceToBook"
+  | "dividendYield"
+  | "returnOnEquity"
+> & {
+  exchange: string;
+  name: string;
+  sector: string;
+};
 
 function compareRows(a: ScreenerRow, b: ScreenerRow, sortBy: string, order: string) {
   const left = a[sortBy as keyof ScreenerRow];
@@ -188,12 +204,26 @@ export async function GET(req: NextRequest) {
       })
       .sort((a, b) => compareRows(a, b, sortBy, sortOrder));
 
-    return NextResponse.json(
-      limit && Number.isFinite(limit) ? results.slice(0, limit) : results,
-      {
-        headers: dataWarning ? { "X-Data-Warning": dataWarning } : undefined,
-      },
-    );
+    const limitedResults =
+      limit && Number.isFinite(limit) ? results.slice(0, limit) : results;
+    const response: ScreenerResponse[] = limitedResults.map((row) => ({
+      symbol: row.symbol,
+      name: row.name,
+      exchange: row.exchange,
+      sector: row.sector ?? "Unclassified",
+      regularMarketPrice: row.regularMarketPrice,
+      regularMarketChangePercent: row.regularMarketChangePercent,
+      regularMarketVolume: row.regularMarketVolume,
+      marketCap: row.marketCap,
+      trailingPE: row.trailingPE,
+      priceToBook: row.priceToBook,
+      dividendYield: row.dividendYield,
+      returnOnEquity: row.returnOnEquity,
+    }));
+
+    return NextResponse.json(response, {
+      headers: dataWarning ? { "X-Data-Warning": dataWarning } : undefined,
+    });
   } catch (error) {
     console.error("Screener data is unavailable", error);
     return NextResponse.json(

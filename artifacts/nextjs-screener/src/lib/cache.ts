@@ -44,11 +44,14 @@ class TtlCache {
 
     const request = fn()
       .then((value) => {
-        if (
+        const shouldCache =
           value !== null &&
           value !== undefined &&
-          !(Array.isArray(value) && value.length === 0)
-        ) {
+          !(typeof value === "string" && value.trim() === "") &&
+          !(Array.isArray(value) && value.length === 0) &&
+          !(typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === 0) &&
+          !(typeof value === "number" && !Number.isFinite(value));
+        if (shouldCache) {
           this.set(key, value, ttlMs);
         }
         return value;

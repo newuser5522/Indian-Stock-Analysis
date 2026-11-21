@@ -128,8 +128,7 @@ export default function QueryPage() {
           Query Screener
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Write formula queries like screener.in — filter 109+ NSE stocks by any
-          metric
+          Build formula filters across the available live NSE-listed equity dataset.
         </p>
       </div>
 
@@ -139,7 +138,7 @@ export default function QueryPage() {
           <span className="text-primary">›</span>
           <span>
             Fields: pe, pb, roe, price, change_pct, volume, market_cap, eps,
-            div_yield, forward_pe, week52_high, week52_low
+            div_yield, dividend_yield, forward_pe, week52_high, week52_low
           </span>
         </div>
         <div className="flex gap-2">
